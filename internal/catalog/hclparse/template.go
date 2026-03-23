@@ -135,9 +135,10 @@ func ParseTemplateFile(path string) (*TemplateDef, []string, error) {
 					}
 					for it := val.ElementIterator(); it.Next(); {
 						_, lv := it.Element()
-						if lv.Type() == cty.String {
-							def.IgnoreDeps = append(def.IgnoreDeps, lv.AsString())
+						if lv.Type() != cty.String {
+							return nil, nil, fmt.Errorf("ignore_deps elements must be strings in %s", absPath)
 						}
+						def.IgnoreDeps = append(def.IgnoreDeps, lv.AsString())
 					}
 				}
 			}

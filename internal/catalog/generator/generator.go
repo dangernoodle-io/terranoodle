@@ -84,6 +84,11 @@ func Generate(cfg *Config) ([]Error, error) {
 		def.IgnoreDeps,
 	)
 
+	// Validate that ignoreDeps entries match actual dependency labels in the catalog.
+	if errs := validateIgnoreDeps(ignoreDeps, layout); len(errs) > 0 {
+		return errs, nil
+	}
+
 	var depErrors []Error
 	for _, tmpl := range def.Stacks {
 		depErrors = append(depErrors, validateServiceDeps(tmpl.Name, tmpl.Values, layout, ignoreDeps)...)
@@ -430,13 +435,18 @@ func validate(def *hclparse.TemplateDef, _ *catalog.Layout, serviceBaseNames map
 		if nameMustMatch != "" {
 			matchKey := nameMustMatch
 			if val, ok := tmpl.Values[matchKey]; ok {
-				if val.Type() == cty.String && val.IsKnown() {
-					if val.AsString() != tmpl.Name {
-						errs = append(errs, Error{
-							Template: tmpl.Name,
-							Detail:   fmt.Sprintf("template name %q does not match %s %q", tmpl.Name, matchKey, val.AsString()),
-						})
-					}
+				if !val.IsKnown() {
+					// skip unknown values
+				} else if val.Type() != cty.String {
+					errs = append(errs, Error{
+						Template: tmpl.Name,
+						Detail:   fmt.Sprintf("name_must_match key %q must be a string, got %s", matchKey, val.Type().FriendlyName()),
+					})
+				} else if val.AsString() != tmpl.Name {
+					errs = append(errs, Error{
+						Template: tmpl.Name,
+						Detail:   fmt.Sprintf("template name %q does not match %s %q", tmpl.Name, matchKey, val.AsString()),
+					})
 				}
 			} else {
 				errs = append(errs, Error{
@@ -446,8 +456,8 @@ func validate(def *hclparse.TemplateDef, _ *catalog.Layout, serviceBaseNames map
 			}
 		}
 
-		// Validation: warn about values keys that look like service names but
-		// don't match any catalog service base name.
+		// Validation: warn about values keys that don't match any catalog service
+		// but are similar to one (fuzzy match).
 		allValueKeys := make(map[string]bool)
 		for k := range tmpl.Values {
 			allValueKeys[k] = true
@@ -456,11 +466,13 @@ func validate(def *hclparse.TemplateDef, _ *catalog.Layout, serviceBaseNames map
 			allValueKeys[k] = true
 		}
 		for key := range allValueKeys {
-			if strings.Contains(key, "-") && !serviceBaseNames[key] {
-				errs = append(errs, Error{
-					Template: tmpl.Name,
-					Detail:   fmt.Sprintf("warning: values key %q contains hyphens but does not match any catalog service; it will be treated as a project value", key),
-				})
+			if !serviceBaseNames[key] {
+				if match := similarServiceName(key, serviceBaseNames); match != "" {
+					errs = append(errs, Error{
+						Template: tmpl.Name,
+						Detail:   fmt.Sprintf("warning: values key %q does not match any catalog service; did you mean %q?", key, match),
+					})
+				}
 			}
 		}
 	}
@@ -621,6 +633,92 @@ func validateServiceDeps(templateName string, values map[string]cty.Value, layou
 	}
 
 	return errs
+}
+
+// validateIgnoreDeps checks that each ignoreDeps entry matches at least one
+// actual dependency label in the catalog. Returns validation errors for any
+// entries that don't match (indicating likely typos).
+func validateIgnoreDeps(ignoreDeps map[string]bool, layout *catalog.Layout) []Error {
+	// Collect all dependency labels from the catalog.
+	allDepLabels := make(map[string]bool)
+	for _, svc := range layout.Services {
+		for _, dep := range svc.Dependencies {
+			allDepLabels[dep] = true
+		}
+	}
+
+	var errs []Error
+	for dep := range ignoreDeps {
+		if !allDepLabels[dep] {
+			errs = append(errs, Error{
+				Detail: fmt.Sprintf("ignore_deps entry %q does not match any catalog service dependency; this likely indicates a typo", dep),
+			})
+		}
+	}
+
+	return errs
+}
+
+// levenshtein computes the edit distance between two strings using dynamic
+// programming (standard Levenshtein distance algorithm).
+func levenshtein(a, b string) int {
+	if len(a) == 0 {
+		return len(b)
+	}
+	if len(b) == 0 {
+		return len(a)
+	}
+
+	aLen := len(a)
+	bLen := len(b)
+
+	// Create two rows for DP table (space optimization).
+	prev := make([]int, bLen+1)
+	curr := make([]int, bLen+1)
+
+	// Initialize first row.
+	for j := 0; j <= bLen; j++ {
+		prev[j] = j
+	}
+
+	for i := 1; i <= aLen; i++ {
+		curr[0] = i
+		for j := 1; j <= bLen; j++ {
+			cost := 1
+			if a[i-1] == b[j-1] {
+				cost = 0
+			}
+			curr[j] = min(min(curr[j-1]+1, prev[j]+1), prev[j-1]+cost)
+		}
+		prev, curr = curr, prev
+	}
+
+	return prev[bLen]
+}
+
+// similarServiceName checks if key is similar to any catalog service name.
+// Returns the closest match if found within edit distance 2, or a case-insensitive
+// match. Returns empty string if no close match found.
+func similarServiceName(key string, serviceBaseNames map[string]bool) string {
+	// Check case-insensitive exact match first.
+	for serviceName := range serviceBaseNames {
+		if strings.EqualFold(key, serviceName) {
+			return serviceName
+		}
+	}
+
+	// Check Levenshtein distance <= 2.
+	var closest string
+	minDist := 3 // Start at 3 to catch up to distance 2
+	for serviceName := range serviceBaseNames {
+		dist := levenshtein(strings.ToLower(key), strings.ToLower(serviceName))
+		if dist <= 2 && dist < minDist {
+			minDist = dist
+			closest = serviceName
+		}
+	}
+
+	return closest
 }
 
 // copyFile copies a file from src to dst.

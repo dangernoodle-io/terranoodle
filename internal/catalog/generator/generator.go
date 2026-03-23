@@ -10,9 +10,9 @@ import (
 	"github.com/fatih/color"
 	"github.com/zclconf/go-cty/cty"
 
-	"dangernoodle.io/terra-tools/internal/catalog/catalog"
-	"dangernoodle.io/terra-tools/internal/catalog/hclparse"
-	"dangernoodle.io/terra-tools/internal/output"
+	"dangernoodle.io/terratools/internal/catalog/catalog"
+	"dangernoodle.io/terratools/internal/catalog/hclparse"
+	"dangernoodle.io/terratools/internal/output"
 )
 
 // Config holds all inputs needed for generation.

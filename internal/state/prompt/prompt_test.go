@@ -13,8 +13,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
 
-	"dangernoodle.io/terra-tools/internal/state/config"
-	"dangernoodle.io/terra-tools/internal/state/resolver"
+	"dangernoodle.io/terratools/internal/state/config"
+	"dangernoodle.io/terratools/internal/state/resolver"
 )
 
 // TestManualID_EnteredValueWithSave tests the ManualID function with a valid

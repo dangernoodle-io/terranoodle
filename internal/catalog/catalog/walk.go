@@ -5,8 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"dangernoodle.io/terra-tools/internal/hclutils"
-	"dangernoodle.io/terra-tools/internal/output"
+	"dangernoodle.io/terratools/internal/hclutils"
+	"dangernoodle.io/terratools/internal/output"
 )
 
 // Layout represents the catalog's directory structure.

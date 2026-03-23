@@ -7,8 +7,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/zclconf/go-cty/cty"
 
-	"dangernoodle.io/terra-tools/internal/catalog/catalog"
-	"dangernoodle.io/terra-tools/internal/catalog/hclparse"
+	"dangernoodle.io/terratools/internal/catalog/catalog"
+	"dangernoodle.io/terratools/internal/catalog/hclparse"
 )
 
 func TestSplitValues_AllProject(t *testing.T) {

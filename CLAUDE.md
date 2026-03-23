@@ -1,15 +1,15 @@
-# terra-tools
+# terratools
 
 Unified Terragrunt/Terraform toolchain. Single binary combining terra-generate, terra-import, and terra-lint.
 
 ## Module
 
-`dangernoodle.io/terra-tools` — Go 1.26.1
+`dangernoodle.io/terratools` — Go 1.26.1
 
 ## CLI
 
 ```
-terra-tools
+terratools
   catalog
     generate [flags]   # generate terragrunt stack from catalog template
     scaffold [flags]   # generate catalog from existing terragrunt dir (not yet implemented)
@@ -23,12 +23,12 @@ terra-tools
 ## Build
 
 ```
-go build -o terra-tools ./
+go build -o terratools ./
 ```
 
 To embed a version:
 ```
-go build -ldflags "-X dangernoodle.io/terra-tools/internal/cli.Version=v0.1.0-alpha.1" -o terra-tools ./
+go build -ldflags "-X dangernoodle.io/terratools/internal/cli.Version=v0.1.0-alpha.1" -o terratools ./
 ```
 
 ## Packages

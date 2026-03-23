@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"dangernoodle.io/terra-tools/internal/state/resolver"
+	"dangernoodle.io/terratools/internal/state/resolver"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

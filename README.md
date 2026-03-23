@@ -1,22 +1,22 @@
-# terra-tools
+# terratools
 
 [![Go](https://img.shields.io/badge/Go-1.26.1-00ADD8?logo=go)](https://go.dev/)
 [![Test](https://github.com/dangernoodle-io/terra-tools/actions/workflows/test.yml/badge.svg)](https://github.com/dangernoodle-io/terra-tools/actions/workflows/test.yml)
 [![Release](https://github.com/dangernoodle-io/terra-tools/actions/workflows/release.yml/badge.svg)](https://github.com/dangernoodle-io/terra-tools/actions/workflows/release.yml)
 [![Coverage Status](https://coveralls.io/repos/github/dangernoodle-io/terra-tools/badge.svg?branch=main)](https://coveralls.io/github/dangernoodle-io/terra-tools?branch=main)
 
-A unified CLI for managing Terragrunt/Terraform infrastructure. terra-tools consolidates three essential operations into a single binary:
+A unified CLI for managing Terragrunt/Terraform infrastructure. terratools consolidates three essential operations into a single binary:
 
 - **catalog generate** — generate [implicit terragrunt stacks](https://terragrunt.gruntwork.io/docs/features/stacks/#implicit-stacks) from a catalog-driven template system
 - **state import** — generate and apply terraform import blocks from plan output
 - **lint** — validate terragrunt configs against their referenced terraform modules
 
-> **Note:** terra-tools is in pre-release. The CLI interface is subject to change.
+> **Note:** terratools is in pre-release. The CLI interface is subject to change.
 
 ## Commands
 
 ```
-terra-tools
+terratools
   catalog
     generate    generate terragrunt stack from catalog template
   lint          validate terragrunt configs against terraform modules
@@ -87,7 +87,7 @@ Archives are provided for:
 ### From Source
 
 ```bash
-go install dangernoodle.io/terra-tools@latest
+go install dangernoodle.io/terratools@latest
 ```
 
 ## License

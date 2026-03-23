@@ -5,9 +5,9 @@ import (
 	"path/filepath"
 	"sort"
 
-	"dangernoodle.io/terra-tools/internal/hclutils"
-	"dangernoodle.io/terra-tools/internal/hclutils/tfmod"
-	"dangernoodle.io/terra-tools/internal/hclutils/tftype"
+	"dangernoodle.io/terratools/internal/hclutils"
+	"dangernoodle.io/terratools/internal/hclutils/tfmod"
+	"dangernoodle.io/terratools/internal/hclutils/tftype"
 	"github.com/hashicorp/hcl/v2"
 	"github.com/zclconf/go-cty/cty"
 )

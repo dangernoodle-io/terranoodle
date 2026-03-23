@@ -10,7 +10,7 @@ import (
 	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/zclconf/go-cty/cty"
 
-	"dangernoodle.io/terra-tools/internal/hclutils"
+	"dangernoodle.io/terratools/internal/hclutils"
 )
 
 // TemplateDef holds the complete parsed template file.

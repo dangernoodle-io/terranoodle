@@ -10,8 +10,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"dangernoodle.io/terra-tools/internal/state/config"
-	"dangernoodle.io/terra-tools/internal/state/resolver"
+	"dangernoodle.io/terratools/internal/state/config"
+	"dangernoodle.io/terratools/internal/state/resolver"
 )
 
 // makeRC is a convenience constructor for tfjson.ResourceChange.

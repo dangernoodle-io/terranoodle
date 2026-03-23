@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"dangernoodle.io/terra-tools/internal/cli"
+	"dangernoodle.io/terratools/internal/cli"
 )
 
 func main() {

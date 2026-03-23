@@ -9,14 +9,14 @@ builds:
     flags:
       - -trimpath
     ldflags:
-      - '-s -w -X dangernoodle.io/terra-tools/internal/cli.Version={{.Version}}'
+      - '-s -w -X dangernoodle.io/terratools/internal/cli.Version={{.Version}}'
     goos:
       - linux
       - darwin
     goarch:
       - amd64
       - arm64
-    binary: terra-tools
+    binary: terratools
 archives:
   - format: tar.gz
     format_overrides:

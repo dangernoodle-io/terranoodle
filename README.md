@@ -71,6 +71,7 @@ Scaffold an import config YAML from an existing terraform plan.
 ## Prerequisites
 
 - **terraform >= 1.5** — required for native import block syntax
+- **terragrunt >= 0.90** — required when managing terragrunt-based infrastructure
 - **git** — required when using remote catalog sources (`git::https://...`)
 - **Go 1.22+** — required when building from source
 

@@ -534,13 +534,25 @@ func TestRunStateScaffold_FullPath(t *testing.T) {
 	tmpDir := t.TempDir()
 	outputPath := tmpDir + "/output.yaml"
 
-	// Save old function seam
+	// Save old function seams
 	oldGeneratePlanJSONFn := generatePlanJSONFn
-	t.Cleanup(func() { generatePlanJSONFn = oldGeneratePlanJSONFn })
+	oldCheckVersionFn := checkVersionFn
+	oldCheckTerragruntVersionFn := checkTerragruntVersionFn
+	t.Cleanup(func() {
+		generatePlanJSONFn = oldGeneratePlanJSONFn
+		checkVersionFn = oldCheckVersionFn
+		checkTerragruntVersionFn = oldCheckTerragruntVersionFn
+	})
 
 	// Mock generatePlanJSONFn
 	generatePlanJSONFn = func(ctx context.Context, workDir string, useTerragrunt bool) ([]byte, error) {
 		return []byte(`{"format_version":"1.0","resource_changes":[{"address":"aws_s3_bucket.acme","type":"aws_s3_bucket","change":{"actions":["create"],"after":{"bucket":"acme-bucket"}}}]}`), nil
+	}
+	checkVersionFn = func(ctx context.Context) error {
+		return nil
+	}
+	checkTerragruntVersionFn = func(ctx context.Context) error {
+		return nil
 	}
 
 	oldDirFlag := scaffoldDirFlag
@@ -569,13 +581,25 @@ func TestRunStateScaffold_NoResources(t *testing.T) {
 	tmpDir := t.TempDir()
 	outputPath := tmpDir + "/output.yaml"
 
-	// Save old function seam
+	// Save old function seams
 	oldGeneratePlanJSONFn := generatePlanJSONFn
-	t.Cleanup(func() { generatePlanJSONFn = oldGeneratePlanJSONFn })
+	oldCheckVersionFn := checkVersionFn
+	oldCheckTerragruntVersionFn := checkTerragruntVersionFn
+	t.Cleanup(func() {
+		generatePlanJSONFn = oldGeneratePlanJSONFn
+		checkVersionFn = oldCheckVersionFn
+		checkTerragruntVersionFn = oldCheckTerragruntVersionFn
+	})
 
 	// Mock generatePlanJSONFn to return plan with no creates
 	generatePlanJSONFn = func(ctx context.Context, workDir string, useTerragrunt bool) ([]byte, error) {
 		return []byte(`{"format_version":"1.0","resource_changes":[{"address":"aws_s3_bucket.existing","type":"aws_s3_bucket","change":{"actions":["no-op"]}}]}`), nil
+	}
+	checkVersionFn = func(ctx context.Context) error {
+		return nil
+	}
+	checkTerragruntVersionFn = func(ctx context.Context) error {
+		return nil
 	}
 
 	oldDirFlag := scaffoldDirFlag
@@ -621,7 +645,7 @@ func TestRunStateImport_DryRun(t *testing.T) {
 	})
 
 	// Mock seams
-	checkVersionFn = func(ctx context.Context, workDir string) error {
+	checkVersionFn = func(ctx context.Context) error {
 		return nil
 	}
 	generatePlanJSONFn = func(ctx context.Context, workDir string, useTerragrunt bool) ([]byte, error) {
@@ -678,7 +702,7 @@ func TestRunStateImport_NoCreates(t *testing.T) {
 	})
 
 	// Mock seams
-	checkVersionFn = func(ctx context.Context, workDir string) error {
+	checkVersionFn = func(ctx context.Context) error {
 		return nil
 	}
 	// Plan with only no-op resources, no creates
@@ -732,7 +756,7 @@ func TestRunStateImport_AllManaged(t *testing.T) {
 	})
 
 	// Mock seams
-	checkVersionFn = func(ctx context.Context, workDir string) error {
+	checkVersionFn = func(ctx context.Context) error {
 		return nil
 	}
 	// Plan with one create
@@ -768,13 +792,25 @@ func TestRunStateScaffold_ParseError(t *testing.T) {
 	tmpDir := t.TempDir()
 	outputPath := tmpDir + "/output.yaml"
 
-	// Save old function seam
+	// Save old function seams
 	oldGeneratePlanJSONFn := generatePlanJSONFn
-	t.Cleanup(func() { generatePlanJSONFn = oldGeneratePlanJSONFn })
+	oldCheckVersionFn := checkVersionFn
+	oldCheckTerragruntVersionFn := checkTerragruntVersionFn
+	t.Cleanup(func() {
+		generatePlanJSONFn = oldGeneratePlanJSONFn
+		checkVersionFn = oldCheckVersionFn
+		checkTerragruntVersionFn = oldCheckTerragruntVersionFn
+	})
 
 	// Mock generatePlanJSONFn to return invalid JSON
 	generatePlanJSONFn = func(ctx context.Context, workDir string, useTerragrunt bool) ([]byte, error) {
 		return []byte(`not valid json`), nil
+	}
+	checkVersionFn = func(ctx context.Context) error {
+		return nil
+	}
+	checkTerragruntVersionFn = func(ctx context.Context) error {
+		return nil
 	}
 
 	oldDirFlag := scaffoldDirFlag
@@ -951,7 +987,7 @@ func TestRunStateImport_FullPath(t *testing.T) {
 	})
 
 	// Mock seams
-	checkVersionFn = func(ctx context.Context, workDir string) error {
+	checkVersionFn = func(ctx context.Context) error {
 		return nil
 	}
 	generatePlanJSONFn = func(ctx context.Context, workDir string, useTerragrunt bool) ([]byte, error) {
@@ -1014,7 +1050,7 @@ func TestRunStateImport_CheckInitError(t *testing.T) {
 	})
 
 	// Mock seams
-	checkVersionFn = func(ctx context.Context, workDir string) error {
+	checkVersionFn = func(ctx context.Context) error {
 		return nil
 	}
 	generatePlanJSONFn = func(ctx context.Context, workDir string, useTerragrunt bool) ([]byte, error) {
@@ -1094,7 +1130,7 @@ types:
 		checkInitFn = oldCheckInitFn
 	})
 
-	checkVersionFn = func(ctx context.Context, workDir string) error { return nil }
+	checkVersionFn = func(ctx context.Context) error { return nil }
 	checkInitFn = func(workDir string) error { return nil }
 	generatePlanJSONFn = func(ctx context.Context, workDir string, useTerragrunt bool) ([]byte, error) {
 		return []byte(`{"format_version":"1.0","resource_changes":[{"address":"aws_s3_bucket.acme","type":"aws_s3_bucket","change":{"actions":["create"],"after":{"bucket":"acme-bucket"}}}]}`), nil
@@ -1177,7 +1213,7 @@ func TestRunStateImport_GeneratePlanError(t *testing.T) {
 		generatePlanJSONFn = oldGeneratePlanJSONFn
 	})
 
-	checkVersionFn = func(ctx context.Context, workDir string) error { return nil }
+	checkVersionFn = func(ctx context.Context) error { return nil }
 	checkInitFn = func(workDir string) error { return nil }
 	generatePlanJSONFn = func(ctx context.Context, workDir string, useTerragrunt bool) ([]byte, error) {
 		return nil, fmt.Errorf("plan generation failed")
@@ -1223,7 +1259,7 @@ func TestRunStateImport_ParsePlanError(t *testing.T) {
 		generatePlanJSONFn = oldGeneratePlanJSONFn
 	})
 
-	checkVersionFn = func(ctx context.Context, workDir string) error { return nil }
+	checkVersionFn = func(ctx context.Context) error { return nil }
 	checkInitFn = func(workDir string) error { return nil }
 	generatePlanJSONFn = func(ctx context.Context, workDir string, useTerragrunt bool) ([]byte, error) {
 		return []byte(`not valid json`), nil

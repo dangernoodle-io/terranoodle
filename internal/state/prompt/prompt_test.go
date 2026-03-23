@@ -2,6 +2,9 @@ package prompt
 
 import (
 	"bytes"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
@@ -11,6 +14,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"dangernoodle.io/terra-tools/internal/state/config"
+	"dangernoodle.io/terra-tools/internal/state/resolver"
 )
 
 // TestManualID_EnteredValueWithSave tests the ManualID function with a valid
@@ -295,6 +299,174 @@ func TestDisplayJSONSummary_OtherType(t *testing.T) {
 
 	output := w.String()
 	assert.Contains(t, output, "hello")
+}
+
+// TestAPIAssisted_SkipEmptyChoice tests skipping with empty line.
+func TestAPIAssisted_SkipEmptyChoice(t *testing.T) {
+	input := "\n"
+	r := strings.NewReader(input)
+	w := &bytes.Buffer{}
+	client := resolver.NewAPIClient("http://unused", "")
+
+	id, save, def, err := APIAssisted(r, w, "aws_s3_bucket.main", "aws_s3_bucket", nil, client, "http://unused", nil, nil)
+
+	require.NoError(t, err)
+	assert.Empty(t, id)
+	assert.False(t, save)
+	assert.Nil(t, def)
+}
+
+// TestAPIAssisted_ChoiceManual tests choice [1] delegates to manual ID.
+func TestAPIAssisted_ChoiceManual(t *testing.T) {
+	input := "1\nacme-bucket-123\ny\n"
+	r := strings.NewReader(input)
+	w := &bytes.Buffer{}
+	client := resolver.NewAPIClient("http://unused", "")
+
+	id, save, def, err := APIAssisted(r, w, "aws_s3_bucket.main", "aws_s3_bucket", nil, client, "http://unused", nil, nil)
+
+	require.NoError(t, err)
+	assert.Equal(t, "acme-bucket-123", id)
+	assert.True(t, save)
+	assert.Nil(t, def)
+}
+
+// TestAPIAssisted_UnknownChoice tests unknown choice output.
+func TestAPIAssisted_UnknownChoice(t *testing.T) {
+	input := "9\n"
+	r := strings.NewReader(input)
+	w := &bytes.Buffer{}
+	client := resolver.NewAPIClient("http://unused", "")
+
+	id, save, def, err := APIAssisted(r, w, "aws_s3_bucket.main", "aws_s3_bucket", nil, client, "http://unused", nil, nil)
+
+	require.NoError(t, err)
+	assert.Empty(t, id)
+	assert.False(t, save)
+	assert.Nil(t, def)
+	assert.Contains(t, w.String(), "Unknown choice")
+}
+
+// TestAPIAssisted_ChoiceResolverObjectResponse tests building resolver with object response.
+func TestAPIAssisted_ChoiceResolverObjectResponse(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"id":   "123",
+			"name": "acme-badge",
+			"slug": "acme-slug",
+		})
+	}))
+	defer srv.Close()
+	client := resolver.NewAPIClient(srv.URL, "test-token")
+
+	input := "2\nbadge_id\n\n/api/v1/badges\nslug\n$badge_id\ny\n"
+	r := strings.NewReader(input)
+	w := &bytes.Buffer{}
+
+	id, save, def, err := APIAssisted(r, w, "google_project_badge.main", "google_project_badge", nil, client, srv.URL, nil, nil)
+
+	require.NoError(t, err)
+	assert.Equal(t, "$badge_id", id)
+	assert.True(t, save)
+	assert.NotNil(t, def)
+	assert.Equal(t, "badge_id", def.Name)
+	assert.Equal(t, "/api/v1/badges", def.Get)
+	assert.Equal(t, "slug", def.Pick)
+}
+
+// TestAPIAssisted_ChoiceResolverArrayResponse tests building resolver with array response.
+func TestAPIAssisted_ChoiceResolverArrayResponse(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode([]interface{}{
+			map[string]interface{}{"id": "1", "name": "alpha"},
+			map[string]interface{}{"id": "2", "name": "beta"},
+		})
+	}))
+	defer srv.Close()
+	client := resolver.NewAPIClient(srv.URL, "test-token")
+
+	input := "2\nlookup_id\n\n/api/v1/items\nname\n.name\nid\n$lookup_id\ny\n"
+	r := strings.NewReader(input)
+	w := &bytes.Buffer{}
+
+	id, save, def, err := APIAssisted(r, w, "acme_widget.main", "acme_widget", nil, client, srv.URL, nil, nil)
+
+	require.NoError(t, err)
+	assert.Equal(t, "$lookup_id", id)
+	assert.True(t, save)
+	assert.NotNil(t, def)
+	assert.Equal(t, "lookup_id", def.Name)
+	assert.Equal(t, "/api/v1/items", def.Get)
+
+	// Verify Pick is a map with where and field keys
+	pickMap, ok := def.Pick.(map[string]interface{})
+	assert.True(t, ok)
+	assert.Contains(t, pickMap, "where")
+	assert.Contains(t, pickMap, "field")
+}
+
+// TestAPIAssisted_EmptyResolverName tests resolver with empty name is skipped.
+func TestAPIAssisted_EmptyResolverName(t *testing.T) {
+	input := "2\n\n"
+	r := strings.NewReader(input)
+	w := &bytes.Buffer{}
+	client := resolver.NewAPIClient("http://unused", "")
+
+	id, save, def, err := APIAssisted(r, w, "aws_s3_bucket.main", "aws_s3_bucket", nil, client, "http://unused", nil, nil)
+
+	require.NoError(t, err)
+	assert.Empty(t, id)
+	assert.False(t, save)
+	assert.Nil(t, def)
+	assert.Contains(t, w.String(), "No resolver name")
+}
+
+// TestFormatResolverYAML_StringPick tests YAML formatting with string pick.
+func TestFormatResolverYAML_StringPick(t *testing.T) {
+	result := &ResolverResult{
+		Name: "badge_id",
+		Get:  "/api/badges",
+		Pick: "slug",
+		Use:  nil,
+		TypeMapping: config.TypeMapping{
+			Use: []string{"badge_id"},
+			ID:  "$badge_id",
+		},
+	}
+	w := &bytes.Buffer{}
+
+	formatResolverYAML(w, result, "google_project_badge")
+	output := w.String()
+
+	assert.Contains(t, output, "badge_id:")
+	assert.Contains(t, output, `get: "/api/badges"`)
+	assert.Contains(t, output, `pick: "slug"`)
+}
+
+// TestFormatResolverYAML_MapPickWithDeps tests YAML formatting with map pick and dependencies.
+func TestFormatResolverYAML_MapPickWithDeps(t *testing.T) {
+	result := &ResolverResult{
+		Name: "lookup",
+		Get:  "/api/items",
+		Pick: map[string]interface{}{
+			"where": map[string]string{"name": ".name"},
+			"field": "id",
+		},
+		Use: []string{"other_resolver"},
+		TypeMapping: config.TypeMapping{
+			Use: []string{"other_resolver", "lookup"},
+			ID:  "$lookup",
+		},
+	}
+	w := &bytes.Buffer{}
+
+	formatResolverYAML(w, result, "acme_widget")
+	output := w.String()
+
+	assert.Contains(t, output, "lookup:")
+	assert.Contains(t, output, "use: [other_resolver]")
+	assert.Contains(t, output, `get: "/api/items"`)
+	assert.Contains(t, output, "pick:")
 }
 
 // Helper functions for file operations

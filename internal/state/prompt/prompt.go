@@ -12,8 +12,8 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"dangernoodle.io/terra-tools/internal/state/config"
-	"dangernoodle.io/terra-tools/internal/state/resolver"
+	"dangernoodle.io/terratools/internal/state/config"
+	"dangernoodle.io/terratools/internal/state/resolver"
 )
 
 // ResolverResult holds the definition of a new resolver and its associated

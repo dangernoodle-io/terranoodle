@@ -6,7 +6,7 @@ import (
 	"github.com/hashicorp/hcl/v2"
 	"github.com/zclconf/go-cty/cty"
 
-	"dangernoodle.io/terra-tools/internal/catalog/hclparse"
+	"dangernoodle.io/terratools/internal/catalog/hclparse"
 )
 
 // ResolveValues takes a template's raw values and resolves all template.xxx cross-references

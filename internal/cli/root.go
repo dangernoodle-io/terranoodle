@@ -6,16 +6,16 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"dangernoodle.io/terra-tools/internal/output"
+	"dangernoodle.io/terratools/internal/output"
 )
 
 // Version is set via ldflags at build time.
 var Version string
 
 var rootCmd = &cobra.Command{
-	Use:          "terra-tools",
+	Use:          "terratools",
 	Short:        "Unified Terragrunt/Terraform toolchain",
-	Long:         "terra-tools combines terra-generate, terra-import, and terra-lint into a single binary.",
+	Long:         "terratools combines terra-generate, terra-import, and terra-lint into a single binary.",
 	SilenceUsage: true,
 }
 

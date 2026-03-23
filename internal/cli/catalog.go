@@ -5,10 +5,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"dangernoodle.io/terra-tools/internal/catalog/catalog"
-	"dangernoodle.io/terra-tools/internal/catalog/generator"
-	"dangernoodle.io/terra-tools/internal/catalog/hclparse"
-	"dangernoodle.io/terra-tools/internal/output"
+	"dangernoodle.io/terratools/internal/catalog/catalog"
+	"dangernoodle.io/terratools/internal/catalog/generator"
+	"dangernoodle.io/terratools/internal/catalog/hclparse"
+	"dangernoodle.io/terratools/internal/output"
 )
 
 var catalogCmd = &cobra.Command{

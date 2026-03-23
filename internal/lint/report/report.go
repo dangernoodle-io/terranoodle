@@ -6,7 +6,7 @@ import (
 
 	"github.com/fatih/color"
 
-	"dangernoodle.io/terra-tools/internal/lint/validate"
+	"dangernoodle.io/terratools/internal/lint/validate"
 )
 
 var (

@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/zclconf/go-cty/cty"
 
-	"dangernoodle.io/terra-tools/internal/catalog/hclparse"
+	"dangernoodle.io/terratools/internal/catalog/hclparse"
 )
 
 func TestResolveValues_NoCrossTemplateRefs(t *testing.T) {

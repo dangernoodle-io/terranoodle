@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"testing"
 
-	"dangernoodle.io/terra-tools/internal/lint/validate"
+	"dangernoodle.io/terratools/internal/lint/validate"
 	"github.com/stretchr/testify/assert"
 )
 

@@ -1,0 +1,13 @@
+name: test
+
+on:
+  pull_request:
+  push:
+    branches: ["main"]
+    paths-ignore:
+      - 'README.md'
+
+jobs:
+  test:
+    uses: dangernoodle-io/.github/.github/workflows/go-test.yml@main
+    secrets: inherit

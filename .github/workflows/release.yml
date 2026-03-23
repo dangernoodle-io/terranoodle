@@ -1,0 +1,11 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    uses: dangernoodle-io/.github/.github/workflows/go-release.yml@main
+    secrets: inherit

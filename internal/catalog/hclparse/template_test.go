@@ -159,3 +159,21 @@ func TestParseTemplateFile_MissingFile(t *testing.T) {
 	_, _, err := ParseTemplateFile("/nonexistent/path/template.hcl")
 	require.Error(t, err)
 }
+
+func TestParseTemplateFile_ConfigIgnoreDeps_NonStringElement(t *testing.T) {
+	dir := t.TempDir()
+	path := writeHCL(t, dir, `
+config {
+  ignore_deps = ["valid", 42]
+}
+
+template "svc" {
+  values = {
+    name = "svc"
+  }
+}
+`)
+	_, _, err := ParseTemplateFile(path)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "ignore_deps elements must be strings")
+}

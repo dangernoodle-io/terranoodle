@@ -468,21 +468,24 @@ func TestRunCatalogGenerate_DryRun(t *testing.T) {
 // State import tests
 
 func TestRunStateImport_ConfigNotFound(t *testing.T) {
+	oldImportFlag := importImportFlag
+	oldMvFlag := importMvFlag
 	oldConfigFlag := importConfigFlag
 	oldDirFlag := importDirFlag
 	oldVarFlags := importVarFlags
-	oldDryRunFlag := importDryRunFlag
 	t.Cleanup(func() {
+		importImportFlag = oldImportFlag
+		importMvFlag = oldMvFlag
 		importConfigFlag = oldConfigFlag
 		importDirFlag = oldDirFlag
 		importVarFlags = oldVarFlags
-		importDryRunFlag = oldDryRunFlag
 	})
 
+	importImportFlag = true
+	importMvFlag = false
 	importConfigFlag = "/nonexistent/config.yaml"
 	importDirFlag = ""
 	importVarFlags = nil
-	importDryRunFlag = false
 
 	err := runStateImport(stateImportCmd, nil)
 	assert.Error(t, err)
@@ -496,34 +499,43 @@ func TestRunStateImport_InvalidConfig(t *testing.T) {
 	err := os.WriteFile(configPath, []byte(""), 0644)
 	require.NoError(t, err)
 
+	oldImportFlag := importImportFlag
+	oldMvFlag := importMvFlag
 	oldConfigFlag := importConfigFlag
 	oldDirFlag := importDirFlag
 	oldVarFlags := importVarFlags
-	oldDryRunFlag := importDryRunFlag
 	t.Cleanup(func() {
+		importImportFlag = oldImportFlag
+		importMvFlag = oldMvFlag
 		importConfigFlag = oldConfigFlag
 		importDirFlag = oldDirFlag
 		importVarFlags = oldVarFlags
-		importDryRunFlag = oldDryRunFlag
 	})
 
+	importImportFlag = true
+	importMvFlag = false
 	importConfigFlag = configPath
 	importDirFlag = ""
 	importVarFlags = nil
-	importDryRunFlag = false
 
 	err = runStateImport(stateImportCmd, nil)
 	assert.Error(t, err)
 }
 
 func TestRunStateImport_BadVarFlag(t *testing.T) {
+	oldImportFlag := importImportFlag
+	oldMvFlag := importMvFlag
 	oldConfigFlag := importConfigFlag
 	oldVarFlags := importVarFlags
 	t.Cleanup(func() {
+		importImportFlag = oldImportFlag
+		importMvFlag = oldMvFlag
 		importConfigFlag = oldConfigFlag
 		importVarFlags = oldVarFlags
 	})
 
+	importImportFlag = true
+	importMvFlag = false
 	importConfigFlag = "/any"
 	importVarFlags = []string{"no-equals-sign"}
 
@@ -621,7 +633,7 @@ func TestRunStateScaffold_NoResources(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestRunStateImport_DryRun(t *testing.T) {
+func TestRunStateImport_ImportPreview(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := tmpDir + "/config.yaml"
 
@@ -657,23 +669,35 @@ func TestRunStateImport_DryRun(t *testing.T) {
 		return nil, nil
 	}
 
+	oldImportFlag := importImportFlag
+	oldMvFlag := importMvFlag
+	oldApplyFlag := importApplyFlag
 	oldConfigFlag := importConfigFlag
 	oldDirFlag := importDirFlag
 	oldVarFlags := importVarFlags
-	oldDryRunFlag := importDryRunFlag
+	oldOutputFlag := importOutputFlag
+	oldPlanFlag := importPlanFlag
 	oldForceFlag := importForceFlag
 	t.Cleanup(func() {
+		importImportFlag = oldImportFlag
+		importMvFlag = oldMvFlag
+		importApplyFlag = oldApplyFlag
 		importConfigFlag = oldConfigFlag
 		importDirFlag = oldDirFlag
 		importVarFlags = oldVarFlags
-		importDryRunFlag = oldDryRunFlag
+		importOutputFlag = oldOutputFlag
+		importPlanFlag = oldPlanFlag
 		importForceFlag = oldForceFlag
 	})
 
+	importImportFlag = true
+	importMvFlag = false
+	importApplyFlag = false
 	importConfigFlag = configPath
 	importDirFlag = tmpDir
 	importVarFlags = nil
-	importDryRunFlag = true
+	importOutputFlag = ""
+	importPlanFlag = ""
 	importForceFlag = false
 
 	err = runStateImport(stateImportCmd, nil)
@@ -712,21 +736,36 @@ func TestRunStateImport_NoCreates(t *testing.T) {
 		return []byte(`{"format_version":"1.0","resource_changes":[{"address":"aws_s3_bucket.existing","type":"aws_s3_bucket","change":{"actions":["no-op"]}}]}`), nil
 	}
 
+	oldImportFlag := importImportFlag
+	oldMvFlag := importMvFlag
+	oldApplyFlag := importApplyFlag
 	oldConfigFlag := importConfigFlag
 	oldDirFlag := importDirFlag
 	oldVarFlags := importVarFlags
-	oldDryRunFlag := importDryRunFlag
+	oldOutputFlag := importOutputFlag
+	oldPlanFlag := importPlanFlag
+	oldForceFlag := importForceFlag
 	t.Cleanup(func() {
+		importImportFlag = oldImportFlag
+		importMvFlag = oldMvFlag
+		importApplyFlag = oldApplyFlag
 		importConfigFlag = oldConfigFlag
 		importDirFlag = oldDirFlag
 		importVarFlags = oldVarFlags
-		importDryRunFlag = oldDryRunFlag
+		importOutputFlag = oldOutputFlag
+		importPlanFlag = oldPlanFlag
+		importForceFlag = oldForceFlag
 	})
 
+	importImportFlag = true
+	importMvFlag = false
+	importApplyFlag = false
 	importConfigFlag = configPath
 	importDirFlag = tmpDir
 	importVarFlags = nil
-	importDryRunFlag = false
+	importOutputFlag = ""
+	importPlanFlag = ""
+	importForceFlag = false
 
 	err = runStateImport(stateImportCmd, nil)
 	require.NoError(t, err)
@@ -770,21 +809,36 @@ func TestRunStateImport_AllManaged(t *testing.T) {
 		return addrs, nil
 	}
 
+	oldImportFlag := importImportFlag
+	oldMvFlag := importMvFlag
+	oldApplyFlag := importApplyFlag
 	oldConfigFlag := importConfigFlag
 	oldDirFlag := importDirFlag
 	oldVarFlags := importVarFlags
-	oldDryRunFlag := importDryRunFlag
+	oldOutputFlag := importOutputFlag
+	oldPlanFlag := importPlanFlag
+	oldForceFlag := importForceFlag
 	t.Cleanup(func() {
+		importImportFlag = oldImportFlag
+		importMvFlag = oldMvFlag
+		importApplyFlag = oldApplyFlag
 		importConfigFlag = oldConfigFlag
 		importDirFlag = oldDirFlag
 		importVarFlags = oldVarFlags
-		importDryRunFlag = oldDryRunFlag
+		importOutputFlag = oldOutputFlag
+		importPlanFlag = oldPlanFlag
+		importForceFlag = oldForceFlag
 	})
 
+	importImportFlag = true
+	importMvFlag = false
+	importApplyFlag = false
 	importConfigFlag = configPath
 	importDirFlag = tmpDir
 	importVarFlags = nil
-	importDryRunFlag = false
+	importOutputFlag = ""
+	importPlanFlag = ""
+	importForceFlag = false
 
 	err = runStateImport(stateImportCmd, nil)
 	require.NoError(t, err)
@@ -1005,23 +1059,35 @@ func TestRunStateImport_FullPath(t *testing.T) {
 		return nil
 	}
 
+	oldImportFlag := importImportFlag
+	oldMvFlag := importMvFlag
+	oldApplyFlag := importApplyFlag
 	oldConfigFlag := importConfigFlag
 	oldDirFlag := importDirFlag
 	oldVarFlags := importVarFlags
-	oldDryRunFlag := importDryRunFlag
+	oldOutputFlag := importOutputFlag
+	oldPlanFlag := importPlanFlag
 	oldForceFlag := importForceFlag
 	t.Cleanup(func() {
+		importImportFlag = oldImportFlag
+		importMvFlag = oldMvFlag
+		importApplyFlag = oldApplyFlag
 		importConfigFlag = oldConfigFlag
 		importDirFlag = oldDirFlag
 		importVarFlags = oldVarFlags
-		importDryRunFlag = oldDryRunFlag
+		importOutputFlag = oldOutputFlag
+		importPlanFlag = oldPlanFlag
 		importForceFlag = oldForceFlag
 	})
 
+	importImportFlag = true
+	importMvFlag = false
+	importApplyFlag = true
 	importConfigFlag = configPath
 	importDirFlag = tmpDir
 	importVarFlags = nil
-	importDryRunFlag = false
+	importOutputFlag = ""
+	importPlanFlag = ""
 	importForceFlag = true
 
 	err = runStateImport(stateImportCmd, nil)
@@ -1062,21 +1128,36 @@ func TestRunStateImport_CheckInitError(t *testing.T) {
 		return fmt.Errorf("terraform not initialized")
 	}
 
+	oldImportFlag := importImportFlag
+	oldMvFlag := importMvFlag
+	oldApplyFlag := importApplyFlag
 	oldConfigFlag := importConfigFlag
 	oldDirFlag := importDirFlag
 	oldVarFlags := importVarFlags
-	oldDryRunFlag := importDryRunFlag
+	oldOutputFlag := importOutputFlag
+	oldPlanFlag := importPlanFlag
+	oldForceFlag := importForceFlag
 	t.Cleanup(func() {
+		importImportFlag = oldImportFlag
+		importMvFlag = oldMvFlag
+		importApplyFlag = oldApplyFlag
 		importConfigFlag = oldConfigFlag
 		importDirFlag = oldDirFlag
 		importVarFlags = oldVarFlags
-		importDryRunFlag = oldDryRunFlag
+		importOutputFlag = oldOutputFlag
+		importPlanFlag = oldPlanFlag
+		importForceFlag = oldForceFlag
 	})
 
+	importImportFlag = true
+	importMvFlag = false
+	importApplyFlag = false
 	importConfigFlag = configPath
 	importDirFlag = tmpDir
 	importVarFlags = nil
-	importDryRunFlag = false
+	importOutputFlag = ""
+	importPlanFlag = ""
+	importForceFlag = false
 
 	err = runStateImport(stateImportCmd, nil)
 	assert.Error(t, err)
@@ -1141,23 +1222,35 @@ types:
 		return nil, nil
 	}
 
+	oldImportFlag := importImportFlag
+	oldMvFlag := importMvFlag
+	oldApplyFlag := importApplyFlag
 	oldConfigFlag := importConfigFlag
 	oldDirFlag := importDirFlag
 	oldVarFlags := importVarFlags
-	oldDryRunFlag := importDryRunFlag
+	oldOutputFlag := importOutputFlag
+	oldPlanFlag := importPlanFlag
 	oldForceFlag := importForceFlag
 	t.Cleanup(func() {
+		importImportFlag = oldImportFlag
+		importMvFlag = oldMvFlag
+		importApplyFlag = oldApplyFlag
 		importConfigFlag = oldConfigFlag
 		importDirFlag = oldDirFlag
 		importVarFlags = oldVarFlags
-		importDryRunFlag = oldDryRunFlag
+		importOutputFlag = oldOutputFlag
+		importPlanFlag = oldPlanFlag
 		importForceFlag = oldForceFlag
 	})
 
+	importImportFlag = true
+	importMvFlag = false
+	importApplyFlag = false
 	importConfigFlag = configPath
 	importDirFlag = tmpDir
 	importVarFlags = []string{"region=us-west-2"}
-	importDryRunFlag = true
+	importOutputFlag = ""
+	importPlanFlag = ""
 	importForceFlag = false
 
 	err = runStateImport(stateImportCmd, nil)
@@ -1221,21 +1314,36 @@ func TestRunStateImport_GeneratePlanError(t *testing.T) {
 		return nil, fmt.Errorf("plan generation failed")
 	}
 
+	oldImportFlag := importImportFlag
+	oldMvFlag := importMvFlag
+	oldApplyFlag := importApplyFlag
 	oldConfigFlag := importConfigFlag
 	oldDirFlag := importDirFlag
 	oldVarFlags := importVarFlags
-	oldDryRunFlag := importDryRunFlag
+	oldOutputFlag := importOutputFlag
+	oldPlanFlag := importPlanFlag
+	oldForceFlag := importForceFlag
 	t.Cleanup(func() {
+		importImportFlag = oldImportFlag
+		importMvFlag = oldMvFlag
+		importApplyFlag = oldApplyFlag
 		importConfigFlag = oldConfigFlag
 		importDirFlag = oldDirFlag
 		importVarFlags = oldVarFlags
-		importDryRunFlag = oldDryRunFlag
+		importOutputFlag = oldOutputFlag
+		importPlanFlag = oldPlanFlag
+		importForceFlag = oldForceFlag
 	})
 
+	importImportFlag = true
+	importMvFlag = false
+	importApplyFlag = false
 	importConfigFlag = configPath
 	importDirFlag = tmpDir
 	importVarFlags = nil
-	importDryRunFlag = false
+	importOutputFlag = ""
+	importPlanFlag = ""
+	importForceFlag = false
 
 	err = runStateImport(stateImportCmd, nil)
 	assert.Error(t, err)
@@ -1267,21 +1375,36 @@ func TestRunStateImport_ParsePlanError(t *testing.T) {
 		return []byte(`not valid json`), nil
 	}
 
+	oldImportFlag := importImportFlag
+	oldMvFlag := importMvFlag
+	oldApplyFlag := importApplyFlag
 	oldConfigFlag := importConfigFlag
 	oldDirFlag := importDirFlag
 	oldVarFlags := importVarFlags
-	oldDryRunFlag := importDryRunFlag
+	oldOutputFlag := importOutputFlag
+	oldPlanFlag := importPlanFlag
+	oldForceFlag := importForceFlag
 	t.Cleanup(func() {
+		importImportFlag = oldImportFlag
+		importMvFlag = oldMvFlag
+		importApplyFlag = oldApplyFlag
 		importConfigFlag = oldConfigFlag
 		importDirFlag = oldDirFlag
 		importVarFlags = oldVarFlags
-		importDryRunFlag = oldDryRunFlag
+		importOutputFlag = oldOutputFlag
+		importPlanFlag = oldPlanFlag
+		importForceFlag = oldForceFlag
 	})
 
+	importImportFlag = true
+	importMvFlag = false
+	importApplyFlag = false
 	importConfigFlag = configPath
 	importDirFlag = tmpDir
 	importVarFlags = nil
-	importDryRunFlag = false
+	importOutputFlag = ""
+	importPlanFlag = ""
+	importForceFlag = false
 
 	err = runStateImport(stateImportCmd, nil)
 	assert.Error(t, err)
@@ -1776,15 +1899,21 @@ func TestRunStateImport_VersionError(t *testing.T) {
 	err := os.WriteFile(configPath, []byte("types:\n  aws_s3_bucket:\n    id: \"{{.bucket}}\""), 0644)
 	require.NoError(t, err)
 
+	oldImportFlag := importImportFlag
+	oldMvFlag := importMvFlag
 	oldConfig := importConfigFlag
 	oldDir := importDirFlag
 	oldCheckVersion := checkVersionFn
 	t.Cleanup(func() {
+		importImportFlag = oldImportFlag
+		importMvFlag = oldMvFlag
 		importConfigFlag = oldConfig
 		importDirFlag = oldDir
 		checkVersionFn = oldCheckVersion
 	})
 
+	importImportFlag = true
+	importMvFlag = false
 	importConfigFlag = configPath
 	importDirFlag = tmpDir
 	checkVersionFn = func(ctx context.Context) error {
@@ -1802,17 +1931,23 @@ func TestRunStateImport_TerragruntVersionError(t *testing.T) {
 	err := os.WriteFile(configPath, []byte("types:\n  aws_s3_bucket:\n    id: \"{{.bucket}}\""), 0644)
 	require.NoError(t, err)
 
+	oldImportFlag := importImportFlag
+	oldMvFlag := importMvFlag
 	oldConfig := importConfigFlag
 	oldDir := importDirFlag
 	oldCheckVersion := checkVersionFn
 	oldCheckTgVersion := checkTerragruntVersionFn
 	t.Cleanup(func() {
+		importImportFlag = oldImportFlag
+		importMvFlag = oldMvFlag
 		importConfigFlag = oldConfig
 		importDirFlag = oldDir
 		checkVersionFn = oldCheckVersion
 		checkTerragruntVersionFn = oldCheckTgVersion
 	})
 
+	importImportFlag = true
+	importMvFlag = false
 	importConfigFlag = configPath
 	importDirFlag = tmpDir
 	checkVersionFn = func(ctx context.Context) error { return nil }
@@ -1834,17 +1969,23 @@ func TestRunStateImport_TerragruntFindCacheError(t *testing.T) {
 	err = os.WriteFile(configPath, []byte("types:\n  aws_s3_bucket:\n    id: \"{{.bucket}}\""), 0644)
 	require.NoError(t, err)
 
+	oldImportFlag := importImportFlag
+	oldMvFlag := importMvFlag
 	oldConfig := importConfigFlag
 	oldDir := importDirFlag
 	oldCheckVersion := checkVersionFn
 	oldCheckTgVersion := checkTerragruntVersionFn
 	t.Cleanup(func() {
+		importImportFlag = oldImportFlag
+		importMvFlag = oldMvFlag
 		importConfigFlag = oldConfig
 		importDirFlag = oldDir
 		checkVersionFn = oldCheckVersion
 		checkTerragruntVersionFn = oldCheckTgVersion
 	})
 
+	importImportFlag = true
+	importMvFlag = false
 	importConfigFlag = configPath
 	importDirFlag = tmpDir
 	checkVersionFn = func(ctx context.Context) error { return nil }
@@ -1853,6 +1994,736 @@ func TestRunStateImport_TerragruntFindCacheError(t *testing.T) {
 	err = runStateImport(stateImportCmd, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "initialised")
+}
+
+func TestRunStateImport_MissingModeFlag(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+	err := os.WriteFile(configPath, []byte("types:\n  aws_s3_bucket:\n    id: \"{{.bucket}}\""), 0644)
+	require.NoError(t, err)
+
+	oldImportFlag := importImportFlag
+	oldMvFlag := importMvFlag
+	oldConfig := importConfigFlag
+	oldDir := importDirFlag
+	t.Cleanup(func() {
+		importImportFlag = oldImportFlag
+		importMvFlag = oldMvFlag
+		importConfigFlag = oldConfig
+		importDirFlag = oldDir
+	})
+
+	importImportFlag = false
+	importMvFlag = false
+	importConfigFlag = configPath
+	importDirFlag = tmpDir
+
+	err = runStateImport(stateImportCmd, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "one of --import or --mv is required")
+}
+
+func TestRunStateImport_BothModeFlags(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+	err := os.WriteFile(configPath, []byte("types:\n  aws_s3_bucket:\n    id: \"{{.bucket}}\""), 0644)
+	require.NoError(t, err)
+
+	oldImportFlag := importImportFlag
+	oldMvFlag := importMvFlag
+	oldConfig := importConfigFlag
+	oldDir := importDirFlag
+	t.Cleanup(func() {
+		importImportFlag = oldImportFlag
+		importMvFlag = oldMvFlag
+		importConfigFlag = oldConfig
+		importDirFlag = oldDir
+	})
+
+	importImportFlag = true
+	importMvFlag = true
+	importConfigFlag = configPath
+	importDirFlag = tmpDir
+
+	err = runStateImport(stateImportCmd, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "mutually exclusive")
+}
+
+func TestRunStateImport_MvPreview(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := tmpDir + "/config.yaml"
+
+	configContent := `types:
+  aws_s3_bucket:
+    id: "{{.bucket}}"`
+	err := os.WriteFile(configPath, []byte(configContent), 0644)
+	require.NoError(t, err)
+
+	err = os.MkdirAll(filepath.Join(tmpDir, ".terraform"), 0755)
+	require.NoError(t, err)
+
+	oldCheckVersionFn := checkVersionFn
+	oldGeneratePlanJSONFn := generatePlanJSONFn
+	oldCheckStateFn := checkStateFn
+	oldCheckInitFn := checkInitFn
+	t.Cleanup(func() {
+		checkVersionFn = oldCheckVersionFn
+		generatePlanJSONFn = oldGeneratePlanJSONFn
+		checkStateFn = oldCheckStateFn
+		checkInitFn = oldCheckInitFn
+	})
+
+	checkVersionFn = func(ctx context.Context) error { return nil }
+	checkInitFn = func(workDir string) error { return nil }
+	generatePlanJSONFn = func(ctx context.Context, workDir string, useTerragrunt bool) ([]byte, error) {
+		return []byte(`{"format_version":"1.0","resource_changes":[{"address":"aws_s3_bucket.acme","type":"aws_s3_bucket","change":{"actions":["create"],"after":{"bucket":"acme-bucket"}}}]}`), nil
+	}
+	checkStateFn = func(ctx context.Context, workDir string, addrs []string, useTerragrunt bool) ([]string, error) {
+		return nil, nil
+	}
+
+	oldImportFlag := importImportFlag
+	oldMvFlag := importMvFlag
+	oldApplyFlag := importApplyFlag
+	oldConfigFlag := importConfigFlag
+	oldDirFlag := importDirFlag
+	oldVarFlags := importVarFlags
+	oldOutputFlag := importOutputFlag
+	oldPlanFlag := importPlanFlag
+	oldForceFlag := importForceFlag
+	t.Cleanup(func() {
+		importImportFlag = oldImportFlag
+		importMvFlag = oldMvFlag
+		importApplyFlag = oldApplyFlag
+		importConfigFlag = oldConfigFlag
+		importDirFlag = oldDirFlag
+		importVarFlags = oldVarFlags
+		importOutputFlag = oldOutputFlag
+		importPlanFlag = oldPlanFlag
+		importForceFlag = oldForceFlag
+	})
+
+	importImportFlag = false
+	importMvFlag = true
+	importApplyFlag = false
+	importConfigFlag = configPath
+	importDirFlag = tmpDir
+	importVarFlags = nil
+	importOutputFlag = ""
+	importPlanFlag = ""
+	importForceFlag = false
+
+	err = runStateImport(stateImportCmd, nil)
+	require.NoError(t, err)
+}
+
+func TestRunStateImport_MvApply(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := tmpDir + "/config.yaml"
+
+	configContent := `types:
+  aws_s3_bucket:
+    id: "{{.bucket}}"`
+	err := os.WriteFile(configPath, []byte(configContent), 0644)
+	require.NoError(t, err)
+
+	err = os.MkdirAll(filepath.Join(tmpDir, ".terraform"), 0755)
+	require.NoError(t, err)
+
+	oldCheckVersionFn := checkVersionFn
+	oldGeneratePlanJSONFn := generatePlanJSONFn
+	oldCheckStateFn := checkStateFn
+	oldCheckInitFn := checkInitFn
+	oldTerraformImportFn := terraformImportFn
+	t.Cleanup(func() {
+		checkVersionFn = oldCheckVersionFn
+		generatePlanJSONFn = oldGeneratePlanJSONFn
+		checkStateFn = oldCheckStateFn
+		checkInitFn = oldCheckInitFn
+		terraformImportFn = oldTerraformImportFn
+	})
+
+	checkVersionFn = func(ctx context.Context) error { return nil }
+	checkInitFn = func(workDir string) error { return nil }
+	generatePlanJSONFn = func(ctx context.Context, workDir string, useTerragrunt bool) ([]byte, error) {
+		return []byte(`{"format_version":"1.0","resource_changes":[{"address":"aws_s3_bucket.acme","type":"aws_s3_bucket","change":{"actions":["create"],"after":{"bucket":"acme-bucket"}}}]}`), nil
+	}
+	checkStateFn = func(ctx context.Context, workDir string, addrs []string, useTerragrunt bool) ([]string, error) {
+		return nil, nil
+	}
+
+	capturedCalls := []struct {
+		addr string
+		id   string
+	}{}
+	terraformImportFn = func(ctx context.Context, workDir, addr, id string, useTerragrunt bool) error {
+		capturedCalls = append(capturedCalls, struct {
+			addr string
+			id   string
+		}{addr, id})
+		return nil
+	}
+
+	oldImportFlag := importImportFlag
+	oldMvFlag := importMvFlag
+	oldApplyFlag := importApplyFlag
+	oldConfigFlag := importConfigFlag
+	oldDirFlag := importDirFlag
+	oldVarFlags := importVarFlags
+	oldOutputFlag := importOutputFlag
+	oldPlanFlag := importPlanFlag
+	oldForceFlag := importForceFlag
+	t.Cleanup(func() {
+		importImportFlag = oldImportFlag
+		importMvFlag = oldMvFlag
+		importApplyFlag = oldApplyFlag
+		importConfigFlag = oldConfigFlag
+		importDirFlag = oldDirFlag
+		importVarFlags = oldVarFlags
+		importOutputFlag = oldOutputFlag
+		importPlanFlag = oldPlanFlag
+		importForceFlag = oldForceFlag
+	})
+
+	importImportFlag = false
+	importMvFlag = true
+	importApplyFlag = true
+	importConfigFlag = configPath
+	importDirFlag = tmpDir
+	importVarFlags = nil
+	importOutputFlag = ""
+	importPlanFlag = ""
+	importForceFlag = false
+
+	err = runStateImport(stateImportCmd, nil)
+	require.NoError(t, err)
+	assert.Equal(t, 1, len(capturedCalls))
+	assert.Equal(t, "aws_s3_bucket.acme", capturedCalls[0].addr)
+	assert.Equal(t, "acme-bucket", capturedCalls[0].id)
+}
+
+func TestRunStateImport_ImportApplyWithOutput(t *testing.T) {
+	tmpDir := t.TempDir()
+	outputPath := filepath.Join(tmpDir, "custom.tf")
+	configPath := tmpDir + "/config.yaml"
+
+	configContent := `types:
+  aws_s3_bucket:
+    id: "{{.bucket}}"`
+	err := os.WriteFile(configPath, []byte(configContent), 0644)
+	require.NoError(t, err)
+
+	err = os.MkdirAll(filepath.Join(tmpDir, ".terraform"), 0755)
+	require.NoError(t, err)
+
+	oldCheckVersionFn := checkVersionFn
+	oldGeneratePlanJSONFn := generatePlanJSONFn
+	oldCheckStateFn := checkStateFn
+	oldCheckInitFn := checkInitFn
+	oldApplyFn := applyFn
+	t.Cleanup(func() {
+		checkVersionFn = oldCheckVersionFn
+		generatePlanJSONFn = oldGeneratePlanJSONFn
+		checkStateFn = oldCheckStateFn
+		checkInitFn = oldCheckInitFn
+		applyFn = oldApplyFn
+	})
+
+	checkVersionFn = func(ctx context.Context) error { return nil }
+	checkInitFn = func(workDir string) error { return nil }
+	generatePlanJSONFn = func(ctx context.Context, workDir string, useTerragrunt bool) ([]byte, error) {
+		return []byte(`{"format_version":"1.0","resource_changes":[{"address":"aws_s3_bucket.acme","type":"aws_s3_bucket","change":{"actions":["create"],"after":{"bucket":"acme-bucket"}}}]}`), nil
+	}
+	checkStateFn = func(ctx context.Context, workDir string, addrs []string, useTerragrunt bool) ([]string, error) {
+		return nil, nil
+	}
+	applyFn = func(ctx context.Context, workDir string, useTerragrunt bool) error { return nil }
+
+	oldImportFlag := importImportFlag
+	oldMvFlag := importMvFlag
+	oldApplyFlag := importApplyFlag
+	oldConfigFlag := importConfigFlag
+	oldDirFlag := importDirFlag
+	oldVarFlags := importVarFlags
+	oldOutputFlag := importOutputFlag
+	oldPlanFlag := importPlanFlag
+	oldForceFlag := importForceFlag
+	t.Cleanup(func() {
+		importImportFlag = oldImportFlag
+		importMvFlag = oldMvFlag
+		importApplyFlag = oldApplyFlag
+		importConfigFlag = oldConfigFlag
+		importDirFlag = oldDirFlag
+		importVarFlags = oldVarFlags
+		importOutputFlag = oldOutputFlag
+		importPlanFlag = oldPlanFlag
+		importForceFlag = oldForceFlag
+	})
+
+	importImportFlag = true
+	importMvFlag = false
+	importApplyFlag = true
+	importConfigFlag = configPath
+	importDirFlag = tmpDir
+	importVarFlags = nil
+	importOutputFlag = outputPath
+	importPlanFlag = ""
+	importForceFlag = false
+
+	err = runStateImport(stateImportCmd, nil)
+	require.NoError(t, err)
+
+	// File is deleted after apply, so we just verify no error occurred
+	// (The "Written: <path>" message confirms it was created and removed)
+}
+
+func TestRunStateImport_PlanFromFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := tmpDir + "/config.yaml"
+	planPath := tmpDir + "/plan.json"
+
+	configContent := `types:
+  aws_s3_bucket:
+    id: "{{.bucket}}"`
+	err := os.WriteFile(configPath, []byte(configContent), 0644)
+	require.NoError(t, err)
+
+	planContent := `{"format_version":"1.0","resource_changes":[{"address":"aws_s3_bucket.acme","type":"aws_s3_bucket","change":{"actions":["create"],"after":{"bucket":"acme-bucket"}}}]}`
+	err = os.WriteFile(planPath, []byte(planContent), 0644)
+	require.NoError(t, err)
+
+	err = os.MkdirAll(filepath.Join(tmpDir, ".terraform"), 0755)
+	require.NoError(t, err)
+
+	oldCheckVersionFn := checkVersionFn
+	oldGeneratePlanJSONFn := generatePlanJSONFn
+	oldCheckStateFn := checkStateFn
+	oldCheckInitFn := checkInitFn
+	t.Cleanup(func() {
+		checkVersionFn = oldCheckVersionFn
+		generatePlanJSONFn = oldGeneratePlanJSONFn
+		checkStateFn = oldCheckStateFn
+		checkInitFn = oldCheckInitFn
+	})
+
+	// generatePlanJSONFn should not be called
+	generatePlanJSONFn = func(ctx context.Context, workDir string, useTerragrunt bool) ([]byte, error) {
+		return nil, fmt.Errorf("should not be called")
+	}
+	checkVersionFn = func(ctx context.Context) error { return nil }
+	checkInitFn = func(workDir string) error { return nil }
+	checkStateFn = func(ctx context.Context, workDir string, addrs []string, useTerragrunt bool) ([]string, error) {
+		return nil, nil
+	}
+
+	oldImportFlag := importImportFlag
+	oldMvFlag := importMvFlag
+	oldApplyFlag := importApplyFlag
+	oldConfigFlag := importConfigFlag
+	oldDirFlag := importDirFlag
+	oldVarFlags := importVarFlags
+	oldOutputFlag := importOutputFlag
+	oldPlanFlag := importPlanFlag
+	oldForceFlag := importForceFlag
+	t.Cleanup(func() {
+		importImportFlag = oldImportFlag
+		importMvFlag = oldMvFlag
+		importApplyFlag = oldApplyFlag
+		importConfigFlag = oldConfigFlag
+		importDirFlag = oldDirFlag
+		importVarFlags = oldVarFlags
+		importOutputFlag = oldOutputFlag
+		importPlanFlag = oldPlanFlag
+		importForceFlag = oldForceFlag
+	})
+
+	importImportFlag = true
+	importMvFlag = false
+	importApplyFlag = false
+	importConfigFlag = configPath
+	importDirFlag = tmpDir
+	importVarFlags = nil
+	importOutputFlag = ""
+	importPlanFlag = planPath
+	importForceFlag = false
+
+	err = runStateImport(stateImportCmd, nil)
+	require.NoError(t, err)
+}
+
+func TestRunStateImport_MvApplyError(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := tmpDir + "/config.yaml"
+
+	configContent := `types:
+  acme_widget:
+    id: "{{.name}}"`
+	err := os.WriteFile(configPath, []byte(configContent), 0644)
+	require.NoError(t, err)
+
+	err = os.MkdirAll(filepath.Join(tmpDir, ".terraform"), 0755)
+	require.NoError(t, err)
+
+	oldCheckVersionFn := checkVersionFn
+	oldGeneratePlanJSONFn := generatePlanJSONFn
+	oldCheckStateFn := checkStateFn
+	oldCheckInitFn := checkInitFn
+	oldTerraformImportFn := terraformImportFn
+	t.Cleanup(func() {
+		checkVersionFn = oldCheckVersionFn
+		generatePlanJSONFn = oldGeneratePlanJSONFn
+		checkStateFn = oldCheckStateFn
+		checkInitFn = oldCheckInitFn
+		terraformImportFn = oldTerraformImportFn
+	})
+
+	checkVersionFn = func(ctx context.Context) error { return nil }
+	checkInitFn = func(workDir string) error { return nil }
+	generatePlanJSONFn = func(ctx context.Context, workDir string, useTerragrunt bool) ([]byte, error) {
+		return []byte(`{"format_version":"1.0","resource_changes":[{"address":"acme_widget.alpha","type":"acme_widget","change":{"actions":["create"],"after":{"name":"alpha-widget"}}}]}`), nil
+	}
+	checkStateFn = func(ctx context.Context, workDir string, addrs []string, useTerragrunt bool) ([]string, error) {
+		return nil, nil
+	}
+	terraformImportFn = func(ctx context.Context, workDir, addr, id string, useTerragrunt bool) error {
+		return fmt.Errorf("import failed")
+	}
+
+	oldImportFlag := importImportFlag
+	oldMvFlag := importMvFlag
+	oldApplyFlag := importApplyFlag
+	oldConfigFlag := importConfigFlag
+	oldDirFlag := importDirFlag
+	oldVarFlags := importVarFlags
+	oldOutputFlag := importOutputFlag
+	oldPlanFlag := importPlanFlag
+	oldForceFlag := importForceFlag
+	t.Cleanup(func() {
+		importImportFlag = oldImportFlag
+		importMvFlag = oldMvFlag
+		importApplyFlag = oldApplyFlag
+		importConfigFlag = oldConfigFlag
+		importDirFlag = oldDirFlag
+		importVarFlags = oldVarFlags
+		importOutputFlag = oldOutputFlag
+		importPlanFlag = oldPlanFlag
+		importForceFlag = oldForceFlag
+	})
+
+	importImportFlag = false
+	importMvFlag = true
+	importApplyFlag = true
+	importConfigFlag = configPath
+	importDirFlag = tmpDir
+	importVarFlags = nil
+	importOutputFlag = ""
+	importPlanFlag = ""
+	importForceFlag = false
+
+	err = runStateImport(stateImportCmd, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "import failed")
+}
+
+func TestRunStateImport_MvPreviewTerragrunt(t *testing.T) {
+	tmpDir := makeTerragruntFixture(t)
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	configContent := `types:
+  acme_widget:
+    id: "{{.name}}"`
+	err := os.WriteFile(configPath, []byte(configContent), 0644)
+	require.NoError(t, err)
+
+	oldCheckVersionFn := checkVersionFn
+	oldCheckTerragruntVersionFn := checkTerragruntVersionFn
+	oldGeneratePlanJSONFn := generatePlanJSONFn
+	oldCheckStateFn := checkStateFn
+	t.Cleanup(func() {
+		checkVersionFn = oldCheckVersionFn
+		checkTerragruntVersionFn = oldCheckTerragruntVersionFn
+		generatePlanJSONFn = oldGeneratePlanJSONFn
+		checkStateFn = oldCheckStateFn
+	})
+
+	checkVersionFn = func(ctx context.Context) error { return nil }
+	checkTerragruntVersionFn = func(ctx context.Context) error { return nil }
+	generatePlanJSONFn = func(ctx context.Context, workDir string, useTerragrunt bool) ([]byte, error) {
+		return []byte(`{"format_version":"1.0","resource_changes":[{"address":"acme_widget.alpha","type":"acme_widget","change":{"actions":["create"],"after":{"name":"alpha-widget"}}}]}`), nil
+	}
+	checkStateFn = func(ctx context.Context, workDir string, addrs []string, useTerragrunt bool) ([]string, error) {
+		return nil, nil
+	}
+
+	oldImportFlag := importImportFlag
+	oldMvFlag := importMvFlag
+	oldApplyFlag := importApplyFlag
+	oldConfigFlag := importConfigFlag
+	oldDirFlag := importDirFlag
+	oldVarFlags := importVarFlags
+	oldOutputFlag := importOutputFlag
+	oldPlanFlag := importPlanFlag
+	oldForceFlag := importForceFlag
+	t.Cleanup(func() {
+		importImportFlag = oldImportFlag
+		importMvFlag = oldMvFlag
+		importApplyFlag = oldApplyFlag
+		importConfigFlag = oldConfigFlag
+		importDirFlag = oldDirFlag
+		importVarFlags = oldVarFlags
+		importOutputFlag = oldOutputFlag
+		importPlanFlag = oldPlanFlag
+		importForceFlag = oldForceFlag
+	})
+
+	importImportFlag = false
+	importMvFlag = true
+	importApplyFlag = false
+	importConfigFlag = configPath
+	importDirFlag = tmpDir
+	importVarFlags = nil
+	importOutputFlag = ""
+	importPlanFlag = ""
+	importForceFlag = false
+
+	err = runStateImport(stateImportCmd, nil)
+	require.NoError(t, err)
+}
+
+func TestRunStateImport_ImportApplyRemovesFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := tmpDir + "/config.yaml"
+	outputPath := filepath.Join(tmpDir, "imports.tf")
+
+	configContent := `types:
+  acme_widget:
+    id: "{{.name}}"`
+	err := os.WriteFile(configPath, []byte(configContent), 0644)
+	require.NoError(t, err)
+
+	err = os.MkdirAll(filepath.Join(tmpDir, ".terraform"), 0755)
+	require.NoError(t, err)
+
+	oldCheckVersionFn := checkVersionFn
+	oldGeneratePlanJSONFn := generatePlanJSONFn
+	oldCheckStateFn := checkStateFn
+	oldCheckInitFn := checkInitFn
+	oldApplyFn := applyFn
+	t.Cleanup(func() {
+		checkVersionFn = oldCheckVersionFn
+		generatePlanJSONFn = oldGeneratePlanJSONFn
+		checkStateFn = oldCheckStateFn
+		checkInitFn = oldCheckInitFn
+		applyFn = oldApplyFn
+	})
+
+	checkVersionFn = func(ctx context.Context) error { return nil }
+	checkInitFn = func(workDir string) error { return nil }
+	generatePlanJSONFn = func(ctx context.Context, workDir string, useTerragrunt bool) ([]byte, error) {
+		return []byte(`{"format_version":"1.0","resource_changes":[{"address":"acme_widget.alpha","type":"acme_widget","change":{"actions":["create"],"after":{"name":"alpha-widget"}}}]}`), nil
+	}
+	checkStateFn = func(ctx context.Context, workDir string, addrs []string, useTerragrunt bool) ([]string, error) {
+		return nil, nil
+	}
+	applyFn = func(ctx context.Context, workDir string, useTerragrunt bool) error { return nil }
+
+	oldImportFlag := importImportFlag
+	oldMvFlag := importMvFlag
+	oldApplyFlag := importApplyFlag
+	oldConfigFlag := importConfigFlag
+	oldDirFlag := importDirFlag
+	oldVarFlags := importVarFlags
+	oldOutputFlag := importOutputFlag
+	oldPlanFlag := importPlanFlag
+	oldForceFlag := importForceFlag
+	t.Cleanup(func() {
+		importImportFlag = oldImportFlag
+		importMvFlag = oldMvFlag
+		importApplyFlag = oldApplyFlag
+		importConfigFlag = oldConfigFlag
+		importDirFlag = oldDirFlag
+		importVarFlags = oldVarFlags
+		importOutputFlag = oldOutputFlag
+		importPlanFlag = oldPlanFlag
+		importForceFlag = oldForceFlag
+	})
+
+	importImportFlag = true
+	importMvFlag = false
+	importApplyFlag = true
+	importConfigFlag = configPath
+	importDirFlag = tmpDir
+	importVarFlags = nil
+	importOutputFlag = ""
+	importPlanFlag = ""
+	importForceFlag = true
+
+	err = runStateImport(stateImportCmd, nil)
+	require.NoError(t, err)
+
+	// Verify that imports.tf file does not exist (removed after apply)
+	_, err = os.Stat(outputPath)
+	assert.True(t, os.IsNotExist(err))
+}
+
+func TestRunStateImport_ImportApplyError(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := tmpDir + "/config.yaml"
+
+	configContent := `types:
+  acme_widget:
+    id: "{{.name}}"`
+	err := os.WriteFile(configPath, []byte(configContent), 0644)
+	require.NoError(t, err)
+
+	err = os.MkdirAll(filepath.Join(tmpDir, ".terraform"), 0755)
+	require.NoError(t, err)
+
+	oldCheckVersionFn := checkVersionFn
+	oldGeneratePlanJSONFn := generatePlanJSONFn
+	oldCheckStateFn := checkStateFn
+	oldCheckInitFn := checkInitFn
+	oldApplyFn := applyFn
+	t.Cleanup(func() {
+		checkVersionFn = oldCheckVersionFn
+		generatePlanJSONFn = oldGeneratePlanJSONFn
+		checkStateFn = oldCheckStateFn
+		checkInitFn = oldCheckInitFn
+		applyFn = oldApplyFn
+	})
+
+	checkVersionFn = func(ctx context.Context) error { return nil }
+	checkInitFn = func(workDir string) error { return nil }
+	generatePlanJSONFn = func(ctx context.Context, workDir string, useTerragrunt bool) ([]byte, error) {
+		return []byte(`{"format_version":"1.0","resource_changes":[{"address":"acme_widget.alpha","type":"acme_widget","change":{"actions":["create"],"after":{"name":"alpha-widget"}}}]}`), nil
+	}
+	checkStateFn = func(ctx context.Context, workDir string, addrs []string, useTerragrunt bool) ([]string, error) {
+		return nil, nil
+	}
+	applyFn = func(ctx context.Context, workDir string, useTerragrunt bool) error {
+		return fmt.Errorf("apply failed")
+	}
+
+	oldImportFlag := importImportFlag
+	oldMvFlag := importMvFlag
+	oldApplyFlag := importApplyFlag
+	oldConfigFlag := importConfigFlag
+	oldDirFlag := importDirFlag
+	oldVarFlags := importVarFlags
+	oldOutputFlag := importOutputFlag
+	oldPlanFlag := importPlanFlag
+	oldForceFlag := importForceFlag
+	t.Cleanup(func() {
+		importImportFlag = oldImportFlag
+		importMvFlag = oldMvFlag
+		importApplyFlag = oldApplyFlag
+		importConfigFlag = oldConfigFlag
+		importDirFlag = oldDirFlag
+		importVarFlags = oldVarFlags
+		importOutputFlag = oldOutputFlag
+		importPlanFlag = oldPlanFlag
+		importForceFlag = oldForceFlag
+	})
+
+	importImportFlag = true
+	importMvFlag = false
+	importApplyFlag = true
+	importConfigFlag = configPath
+	importDirFlag = tmpDir
+	importVarFlags = nil
+	importOutputFlag = ""
+	importPlanFlag = ""
+	importForceFlag = true
+
+	err = runStateImport(stateImportCmd, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "apply failed")
+}
+
+func TestRunStateImport_MvApplyTerragrunt(t *testing.T) {
+	tmpDir := makeTerragruntFixture(t)
+	configPath := filepath.Join(tmpDir, "config.yaml")
+
+	configContent := `types:
+  acme_widget:
+    id: "{{.name}}"`
+	err := os.WriteFile(configPath, []byte(configContent), 0644)
+	require.NoError(t, err)
+
+	oldCheckVersionFn := checkVersionFn
+	oldCheckTerragruntVersionFn := checkTerragruntVersionFn
+	oldGeneratePlanJSONFn := generatePlanJSONFn
+	oldCheckStateFn := checkStateFn
+	oldTerraformImportFn := terraformImportFn
+	t.Cleanup(func() {
+		checkVersionFn = oldCheckVersionFn
+		checkTerragruntVersionFn = oldCheckTerragruntVersionFn
+		generatePlanJSONFn = oldGeneratePlanJSONFn
+		checkStateFn = oldCheckStateFn
+		terraformImportFn = oldTerraformImportFn
+	})
+
+	checkVersionFn = func(ctx context.Context) error { return nil }
+	checkTerragruntVersionFn = func(ctx context.Context) error { return nil }
+	generatePlanJSONFn = func(ctx context.Context, workDir string, useTerragrunt bool) ([]byte, error) {
+		return []byte(`{"format_version":"1.0","resource_changes":[{"address":"acme_widget.alpha","type":"acme_widget","change":{"actions":["create"],"after":{"name":"alpha-widget"}}}]}`), nil
+	}
+	checkStateFn = func(ctx context.Context, workDir string, addrs []string, useTerragrunt bool) ([]string, error) {
+		return nil, nil
+	}
+
+	capturedCalls := []struct {
+		addr          string
+		id            string
+		useTerragrunt bool
+	}{}
+	terraformImportFn = func(ctx context.Context, workDir, addr, id string, useTerragrunt bool) error {
+		capturedCalls = append(capturedCalls, struct {
+			addr          string
+			id            string
+			useTerragrunt bool
+		}{addr, id, useTerragrunt})
+		return nil
+	}
+
+	oldImportFlag := importImportFlag
+	oldMvFlag := importMvFlag
+	oldApplyFlag := importApplyFlag
+	oldConfigFlag := importConfigFlag
+	oldDirFlag := importDirFlag
+	oldVarFlags := importVarFlags
+	oldOutputFlag := importOutputFlag
+	oldPlanFlag := importPlanFlag
+	oldForceFlag := importForceFlag
+	t.Cleanup(func() {
+		importImportFlag = oldImportFlag
+		importMvFlag = oldMvFlag
+		importApplyFlag = oldApplyFlag
+		importConfigFlag = oldConfigFlag
+		importDirFlag = oldDirFlag
+		importVarFlags = oldVarFlags
+		importOutputFlag = oldOutputFlag
+		importPlanFlag = oldPlanFlag
+		importForceFlag = oldForceFlag
+	})
+
+	importImportFlag = false
+	importMvFlag = true
+	importApplyFlag = true
+	importConfigFlag = configPath
+	importDirFlag = tmpDir
+	importVarFlags = nil
+	importOutputFlag = ""
+	importPlanFlag = ""
+	importForceFlag = false
+
+	err = runStateImport(stateImportCmd, nil)
+	require.NoError(t, err)
+	assert.Equal(t, 1, len(capturedCalls))
+	assert.Equal(t, "acme_widget.alpha", capturedCalls[0].addr)
+	assert.Equal(t, "alpha-widget", capturedCalls[0].id)
+	assert.True(t, capturedCalls[0].useTerragrunt)
 }
 
 // State scaffold error tests

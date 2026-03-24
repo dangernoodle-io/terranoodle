@@ -31,10 +31,14 @@ var stateCmd = &cobra.Command{
 
 // state import flags.
 var (
+	importImportFlag bool
+	importMvFlag     bool
+	importApplyFlag  bool
 	importConfigFlag string
 	importDirFlag    string
 	importVarFlags   []string
-	importDryRunFlag bool
+	importOutputFlag string
+	importPlanFlag   string
 	importForceFlag  bool
 )
 
@@ -90,6 +94,12 @@ var (
 		}
 		return remove.StateRm(ctx, workDir, addr)
 	}
+	terraformImportFn = func(ctx context.Context, workDir, addr, id string, useTerragrunt bool) error {
+		if useTerragrunt {
+			return importer.TerragruntImport(ctx, workDir, addr, id)
+		}
+		return importer.TerraformImport(ctx, workDir, addr, id)
+	}
 	confirmCandidatesFn = func(candidates []rename.Candidate, autoConfirm bool) ([]rename.RenamePair, error) {
 		return rename.ConfirmCandidates(os.Stdin, os.Stdout, candidates, autoConfirm)
 	}
@@ -120,11 +130,15 @@ var stateRemoveCmd = &cobra.Command{
 }
 
 func init() {
+	stateImportCmd.Flags().BoolVar(&importImportFlag, "import", false, "Generate import {} blocks")
+	stateImportCmd.Flags().BoolVar(&importMvFlag, "mv", false, "Execute terraform/terragrunt import commands")
+	stateImportCmd.Flags().BoolVar(&importApplyFlag, "apply", false, "Execute the operation (default: preview to stdout)")
 	stateImportCmd.Flags().StringVarP(&importConfigFlag, "config", "c", "", "Path to import config file (required)")
 	stateImportCmd.Flags().StringVar(&importDirFlag, "dir", "", "Working directory (default: current directory)")
 	stateImportCmd.Flags().StringArrayVar(&importVarFlags, "var", nil, "Variable override in key=value form (repeatable)")
-	stateImportCmd.Flags().BoolVar(&importDryRunFlag, "dry-run", false, "Preview imports without writing files")
-	stateImportCmd.Flags().BoolVar(&importForceFlag, "force", false, "Overwrite existing imports.tf")
+	stateImportCmd.Flags().StringVarP(&importOutputFlag, "output", "o", "", "Output file path (default: imports.tf)")
+	stateImportCmd.Flags().StringVar(&importPlanFlag, "plan", "", "Path to existing plan JSON (optional)")
+	stateImportCmd.Flags().BoolVar(&importForceFlag, "force", false, "Overwrite existing output file")
 	_ = stateImportCmd.MarkFlagRequired("config")
 
 	stateScaffoldCmd.Flags().StringVar(&scaffoldDirFlag, "dir", "", "Working directory (default: current directory)")
@@ -221,6 +235,13 @@ func extractFields(after interface{}) map[string]string {
 }
 
 func runStateImport(cmd *cobra.Command, args []string) error {
+	if !importImportFlag && !importMvFlag {
+		return fmt.Errorf("state import: one of --import or --mv is required")
+	}
+	if importImportFlag && importMvFlag {
+		return fmt.Errorf("state import: --import and --mv are mutually exclusive")
+	}
+
 	ctx := context.Background()
 
 	// Parse --var flags into a map.
@@ -253,7 +274,6 @@ func runStateImport(cmd *cobra.Command, args []string) error {
 
 	var workDir string
 	if useTerragrunt {
-		// Check terragrunt version.
 		if err := checkTerragruntVersionFn(ctx); err != nil {
 			return err
 		}
@@ -263,29 +283,29 @@ func runStateImport(cmd *cobra.Command, args []string) error {
 		}
 	} else {
 		workDir = dir
-	}
-
-	// Check init.
-	if useTerragrunt {
-		// For terragrunt, init is implied by having a .terragrunt-cache with .terraform/.
-		// FindTerragruntCache already verifies the .terraform dir exists.
-	} else {
 		if err := checkInitFn(workDir); err != nil {
 			return err
 		}
 	}
 
-	// Generate plan. For terragrunt, run from project dir, not cache dir.
-	planDir := workDir
-	if useTerragrunt {
-		planDir = dir
-	}
+	// Generate or load plan.
 	var planJSON []byte
-	stopSpinner := ui.Spinner("Generating plan...")
-	planJSON, err = generatePlanJSONFn(ctx, planDir, useTerragrunt)
-	stopSpinner()
-	if err != nil {
-		return err
+	if importPlanFlag != "" {
+		planJSON, err = os.ReadFile(importPlanFlag)
+		if err != nil {
+			return fmt.Errorf("state import: read plan: %w", err)
+		}
+	} else {
+		planDir := workDir
+		if useTerragrunt {
+			planDir = dir
+		}
+		stopSpinner := ui.Spinner("Generating plan...")
+		planJSON, err = generatePlanJSONFn(ctx, planDir, useTerragrunt)
+		stopSpinner()
+		if err != nil {
+			return err
+		}
 	}
 
 	p, err := plan.Parse(bytes.NewReader(planJSON))
@@ -352,7 +372,6 @@ func runStateImport(cmd *cobra.Command, args []string) error {
 
 	// Handle unmatched resources interactively.
 	for _, addr := range result.Unmatched {
-		// Find the resource change for this address.
 		var resourceType string
 		fields := map[string]string{}
 		for _, c := range creates {
@@ -399,32 +418,62 @@ func runStateImport(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Generate imports file content.
-	data := importer.GenerateImportsFile(allEntries)
+	// --- Mode-specific execution ---
 
-	if importDryRunFlag {
-		fmt.Print(string(data))
+	if importImportFlag {
+		data := importer.GenerateImportsFile(allEntries)
+
+		if !importApplyFlag {
+			fmt.Print(string(data))
+			return nil
+		}
+
+		path, err := importer.WriteImportsFile(dir, importOutputFlag, data, importForceFlag)
+		if err != nil {
+			return err
+		}
+		output.Info("Written: %s", path)
+
+		stopApply := ui.Spinner("Applying imports...")
+		err = applyFn(ctx, workDir, useTerragrunt)
+		stopApply()
+		if err != nil {
+			return err
+		}
+
+		if removeErr := importer.RemoveImportsFile(path); removeErr != nil {
+			output.Warn("could not remove imports file: %v", removeErr)
+		}
+
+		output.Success("Import complete")
 		return nil
 	}
 
-	path, err := importer.WriteImportsFile(workDir, data, importForceFlag)
-	if err != nil {
-		return err
-	}
-	output.Info("Written: %s", path)
-
-	// Apply imports.
-	stopApply := ui.Spinner("Applying imports...")
-	err = applyFn(ctx, workDir, useTerragrunt)
-	stopApply()
-	if err != nil {
-		return err
+	// --mv mode
+	if !importApplyFlag {
+		binary := "terraform"
+		if useTerragrunt {
+			binary = "terragrunt"
+		}
+		for _, e := range allEntries {
+			fmt.Printf("%s import %s %s\n", binary, output.Bold("%s", e.Address), output.Bold("%s", e.ID))
+		}
+		return nil
 	}
 
-	if removeErr := importer.RemoveImportsFile(path); removeErr != nil {
-		output.Warn("could not remove imports file: %v", removeErr)
+	// --mv --apply: execute terraform import for each entry
+	importDir := workDir
+	if useTerragrunt {
+		importDir = dir
 	}
-
+	for _, e := range allEntries {
+		stop := ui.Spinner(fmt.Sprintf("Importing %s", e.Address))
+		err = terraformImportFn(ctx, importDir, e.Address, e.ID, useTerragrunt)
+		stop()
+		if err != nil {
+			return err
+		}
+	}
 	output.Success("Import complete")
 	return nil
 }

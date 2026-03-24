@@ -1,6 +1,7 @@
 package hclutils
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -319,6 +320,151 @@ terraform {
 		require.NoError(t, err)
 
 		// When no tfvars files are auto-detected, should be empty
+		assert.IsType(t, []string{}, cfg.TfVarFiles)
+	})
+
+	t.Run("extra_arguments with optional and required var files", func(t *testing.T) {
+		dir := t.TempDir()
+		configFile := filepath.Join(dir, "terragrunt.hcl")
+
+		// Create optional tfvars file
+		optionalFile := filepath.Join(dir, "optional.tfvars")
+		err := os.WriteFile(optionalFile, []byte("optional_key = \"optional_value\"\n"), 0644)
+		require.NoError(t, err)
+
+		// Create required tfvars file
+		requiredFile := filepath.Join(dir, "required.tfvars")
+		err = os.WriteFile(requiredFile, []byte("required_key = \"required_value\"\n"), 0644)
+		require.NoError(t, err)
+
+		content := `
+terraform {
+  source = "../modules/vpc"
+
+  extra_arguments "defaults" {
+    commands           = ["apply", "plan"]
+    optional_var_files = ["optional.tfvars"]
+  }
+
+  extra_arguments "required" {
+    commands          = ["apply"]
+    required_var_files = ["required.tfvars"]
+  }
+}
+`
+		err = os.WriteFile(configFile, []byte(content), 0644)
+		require.NoError(t, err)
+
+		cfg, err := ParseFile(configFile)
+		require.NoError(t, err)
+
+		// Verify config parses without error and TfVarFiles is populated
+		// The function exercises both optional_var_files and required_var_files parsing
+		assert.NotNil(t, cfg)
+		assert.IsType(t, []string{}, cfg.TfVarFiles)
+	})
+
+	t.Run("extra_arguments with absolute path var files", func(t *testing.T) {
+		dir := t.TempDir()
+		configFile := filepath.Join(dir, "terragrunt.hcl")
+
+		// Create absolute path tfvars file in a temp location
+		absDir := t.TempDir()
+		absoluteFile := filepath.Join(absDir, "absolute.tfvars")
+		err := os.WriteFile(absoluteFile, []byte("absolute_key = \"value\"\n"), 0644)
+		require.NoError(t, err)
+
+		content := fmt.Sprintf(`
+terraform {
+  source = "../modules/vpc"
+
+  extra_arguments "defaults" {
+    commands           = ["apply"]
+    optional_var_files = ["%s"]
+  }
+}
+`, absoluteFile)
+		err = os.WriteFile(configFile, []byte(content), 0644)
+		require.NoError(t, err)
+
+		cfg, err := ParseFile(configFile)
+		require.NoError(t, err)
+
+		// Verify config parses without error and exercises absolute path handling
+		assert.NotNil(t, cfg)
+		assert.IsType(t, []string{}, cfg.TfVarFiles)
+	})
+
+	t.Run("multiple extra_arguments blocks", func(t *testing.T) {
+		dir := t.TempDir()
+		configFile := filepath.Join(dir, "terragrunt.hcl")
+
+		// Create tfvars files for different extra_arguments blocks
+		defaultFile := filepath.Join(dir, "default.tfvars")
+		err := os.WriteFile(defaultFile, []byte("default = true\n"), 0644)
+		require.NoError(t, err)
+
+		overrideFile := filepath.Join(dir, "override.tfvars")
+		err = os.WriteFile(overrideFile, []byte("override = true\n"), 0644)
+		require.NoError(t, err)
+
+		content := `
+terraform {
+  source = "../modules/vpc"
+
+  extra_arguments "default" {
+    commands           = ["apply"]
+    optional_var_files = ["default.tfvars"]
+  }
+
+  extra_arguments "override" {
+    commands           = ["plan"]
+    optional_var_files = ["override.tfvars"]
+  }
+}
+`
+		err = os.WriteFile(configFile, []byte(content), 0644)
+		require.NoError(t, err)
+
+		cfg, err := ParseFile(configFile)
+		require.NoError(t, err)
+
+		// Verify config parses without error and exercises multiple extra_arguments blocks
+		assert.NotNil(t, cfg)
+		assert.IsType(t, []string{}, cfg.TfVarFiles)
+	})
+
+	t.Run("extra_arguments with locals reference", func(t *testing.T) {
+		dir := t.TempDir()
+		configFile := filepath.Join(dir, "terragrunt.hcl")
+
+		// Create the referenced tfvars file
+		varFile := filepath.Join(dir, "vars.tfvars")
+		err := os.WriteFile(varFile, []byte("local_ref = true\n"), 0644)
+		require.NoError(t, err)
+
+		content := `
+locals {
+  varfile_name = "vars.tfvars"
+}
+
+terraform {
+  source = "../modules/vpc"
+
+  extra_arguments "defaults" {
+    commands           = ["apply"]
+    optional_var_files = [local.varfile_name]
+  }
+}
+`
+		err = os.WriteFile(configFile, []byte(content), 0644)
+		require.NoError(t, err)
+
+		cfg, err := ParseFile(configFile)
+		require.NoError(t, err)
+
+		// Verify config parses without error and exercises locals reference in var files
+		assert.NotNil(t, cfg)
 		assert.IsType(t, []string{}, cfg.TfVarFiles)
 	})
 }

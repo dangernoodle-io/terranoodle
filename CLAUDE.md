@@ -16,6 +16,7 @@ terranoodle
   lint [flags]         # lint terragrunt stack configs
   state
     import [flags]     # generate import blocks from terraform plan (--dry-run for preview)
+    remove [flags]     # remove destroyed resources from state without destroying infrastructure
     rename [flags]     # detect renames and generate moved blocks or execute state mv
     scaffold [flags]   # scaffold import config from existing state
   version              # print version
@@ -61,6 +62,7 @@ go build -ldflags "-X dangernoodle.io/terranoodle/internal/cli.Version=v0.1.0-al
 | `internal/state/importer/` | Terraform apply/state operations |
 | `internal/state/plan/` | Plan JSON parsing |
 | `internal/state/prompt/` | Interactive prompts |
+| `internal/state/remove/` | State removal operations |
 | `internal/state/rename/` | Rename detection, moved block generation, state mv |
 | `internal/state/resolver/` | ID resolution engine |
 | `internal/state/scaffold/` | Scaffold YAML generation |

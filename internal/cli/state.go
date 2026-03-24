@@ -16,6 +16,7 @@ import (
 	"dangernoodle.io/terranoodle/internal/state/importer"
 	"dangernoodle.io/terranoodle/internal/state/plan"
 	"dangernoodle.io/terranoodle/internal/state/prompt"
+	"dangernoodle.io/terranoodle/internal/state/remove"
 	"dangernoodle.io/terranoodle/internal/state/rename"
 	"dangernoodle.io/terranoodle/internal/state/resolver"
 	"dangernoodle.io/terranoodle/internal/state/scaffold"
@@ -55,6 +56,13 @@ var (
 	renameForceFlag  bool
 )
 
+// state remove flags.
+var (
+	removeDirFlag   string
+	removePlanFlag  string
+	removeApplyFlag bool
+)
+
 // Function variables for testing seams.
 var (
 	generatePlanJSONFn       = generatePlanJSON
@@ -75,6 +83,12 @@ var (
 			return rename.TerragruntStateMv(ctx, workDir, from, to)
 		}
 		return rename.StateMv(ctx, workDir, from, to)
+	}
+	stateRmFn = func(ctx context.Context, workDir, addr string, useTerragrunt bool) error {
+		if useTerragrunt {
+			return remove.TerragruntStateRm(ctx, workDir, addr)
+		}
+		return remove.StateRm(ctx, workDir, addr)
 	}
 	confirmCandidatesFn = func(candidates []rename.Candidate, autoConfirm bool) ([]rename.RenamePair, error) {
 		return rename.ConfirmCandidates(os.Stdin, os.Stdout, candidates, autoConfirm)
@@ -99,6 +113,12 @@ var stateRenameCmd = &cobra.Command{
 	RunE:  runStateRename,
 }
 
+var stateRemoveCmd = &cobra.Command{
+	Use:   "remove",
+	Short: "Remove destroyed resources from state without destroying infrastructure",
+	RunE:  runStateRemove,
+}
+
 func init() {
 	stateImportCmd.Flags().StringVarP(&importConfigFlag, "config", "c", "", "Path to import config file (required)")
 	stateImportCmd.Flags().StringVar(&importDirFlag, "dir", "", "Working directory (default: current directory)")
@@ -119,9 +139,14 @@ func init() {
 	stateRenameCmd.Flags().StringVarP(&renameOutputFlag, "output", "o", "", "Output file path (default: moved.tf)")
 	stateRenameCmd.Flags().BoolVar(&renameForceFlag, "force", false, "Overwrite existing output file")
 
+	stateRemoveCmd.Flags().StringVar(&removeDirFlag, "dir", "", "Working directory (default: current directory)")
+	stateRemoveCmd.Flags().StringVar(&removePlanFlag, "plan", "", "Path to existing plan JSON (optional)")
+	stateRemoveCmd.Flags().BoolVar(&removeApplyFlag, "apply", false, "Execute state rm commands (default: preview)")
+
 	stateCmd.AddCommand(stateImportCmd)
 	stateCmd.AddCommand(stateScaffoldCmd)
 	stateCmd.AddCommand(stateRenameCmd)
+	stateCmd.AddCommand(stateRemoveCmd)
 }
 
 func resolveDir(flag string) (string, error) {
@@ -613,5 +638,93 @@ func runStateRename(cmd *cobra.Command, args []string) error {
 		}
 	}
 	output.Success("State moves complete")
+	return nil
+}
+
+func runStateRemove(cmd *cobra.Command, args []string) error {
+	ctx := context.Background()
+
+	dir, err := resolveDir(removeDirFlag)
+	if err != nil {
+		return fmt.Errorf("state remove: resolve dir: %w", err)
+	}
+
+	useTerragrunt := detectTerragrunt(dir)
+
+	if err := checkVersionFn(ctx); err != nil {
+		return err
+	}
+
+	var workDir string
+	if useTerragrunt {
+		if err := checkTerragruntVersionFn(ctx); err != nil {
+			return err
+		}
+		workDir, err = importer.FindTerragruntCache(dir)
+		if err != nil {
+			return err
+		}
+	} else {
+		workDir = dir
+		if err := checkInitFn(workDir); err != nil {
+			return err
+		}
+	}
+
+	var planJSON []byte
+	if removePlanFlag != "" {
+		planJSON, err = os.ReadFile(removePlanFlag)
+		if err != nil {
+			return fmt.Errorf("state remove: read plan: %w", err)
+		}
+	} else {
+		planDir := workDir
+		if useTerragrunt {
+			planDir = dir
+		}
+		stop := ui.Spinner("Generating plan...")
+		planJSON, err = generatePlanJSONFn(ctx, planDir, useTerragrunt)
+		stop()
+		if err != nil {
+			return err
+		}
+	}
+
+	p, err := plan.Parse(bytes.NewReader(planJSON))
+	if err != nil {
+		return fmt.Errorf("state remove: parse plan: %w", err)
+	}
+
+	targets := remove.DetectFromPlan(p)
+	if len(targets) == 0 {
+		output.Info("No resources to remove from state")
+		return nil
+	}
+
+	if !removeApplyFlag {
+		binary := "terraform"
+		if useTerragrunt {
+			binary = "terragrunt"
+		}
+		for _, t := range targets {
+			fmt.Printf("%s state rm %s\n", binary, output.Bold("%s", t.Address))
+		}
+		return nil
+	}
+
+	// Apply mode: run state rm for each target.
+	rmDir := workDir
+	if useTerragrunt {
+		rmDir = dir
+	}
+	for _, t := range targets {
+		stop := ui.Spinner(fmt.Sprintf("Removing %s", t.Address))
+		err = stateRmFn(ctx, rmDir, t.Address, useTerragrunt)
+		stop()
+		if err != nil {
+			return err
+		}
+	}
+	output.Success("State removals complete")
 	return nil
 }

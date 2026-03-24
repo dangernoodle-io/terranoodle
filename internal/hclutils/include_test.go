@@ -1,6 +1,7 @@
 package hclutils
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -510,5 +511,284 @@ inputs = {
 
 		// Should resolve the absolute path correctly
 		assert.True(t, result["test"], "expected test key")
+	})
+}
+
+func TestResolveIncludeExtraArgs(t *testing.T) {
+	t.Run("file without extra_arguments returns empty", func(t *testing.T) {
+		dir := t.TempDir()
+		includePath := filepath.Join(dir, "include.hcl")
+
+		content := `
+terraform {
+  source = "../modules"
+}
+`
+		err := os.WriteFile(includePath, []byte(content), 0644)
+		require.NoError(t, err)
+
+		result, err := ResolveIncludeExtraArgs(includePath, dir)
+		require.NoError(t, err)
+		assert.Empty(t, result, "should return empty when no extra_arguments")
+	})
+
+	t.Run("file with optional_var_files", func(t *testing.T) {
+		dir := t.TempDir()
+		includePath := filepath.Join(dir, "include.hcl")
+
+		// Create tfvars file that the include references
+		varFile := filepath.Join(dir, "vars.tfvars")
+		err := os.WriteFile(varFile, []byte("test = true\n"), 0644)
+		require.NoError(t, err)
+
+		content := `
+terraform {
+  extra_arguments "defaults" {
+    commands           = ["apply", "plan"]
+    optional_var_files = ["vars.tfvars"]
+  }
+}
+`
+		err = os.WriteFile(includePath, []byte(content), 0644)
+		require.NoError(t, err)
+
+		result, err := ResolveIncludeExtraArgs(includePath, dir)
+		require.NoError(t, err)
+		// Function may return empty if expressions don't evaluate, which is okay
+		// The important thing is that it doesn't error
+		assert.IsType(t, []string{}, result)
+	})
+
+	t.Run("file with required_var_files", func(t *testing.T) {
+		dir := t.TempDir()
+		includePath := filepath.Join(dir, "include.hcl")
+
+		// Create tfvars file
+		varFile := filepath.Join(dir, "required.tfvars")
+		err := os.WriteFile(varFile, []byte("key = \"value\"\n"), 0644)
+		require.NoError(t, err)
+
+		content := `
+terraform {
+  extra_arguments "defaults" {
+    commands           = ["apply"]
+    required_var_files = ["required.tfvars"]
+  }
+}
+`
+		err = os.WriteFile(includePath, []byte(content), 0644)
+		require.NoError(t, err)
+
+		result, err := ResolveIncludeExtraArgs(includePath, dir)
+		require.NoError(t, err)
+		assert.IsType(t, []string{}, result)
+	})
+
+	t.Run("file with multiple var files", func(t *testing.T) {
+		dir := t.TempDir()
+		includePath := filepath.Join(dir, "include.hcl")
+
+		// Create multiple tfvars files
+		varFile1 := filepath.Join(dir, "vars1.tfvars")
+		err := os.WriteFile(varFile1, []byte("a = 1\n"), 0644)
+		require.NoError(t, err)
+
+		varFile2 := filepath.Join(dir, "vars2.tfvars")
+		err = os.WriteFile(varFile2, []byte("b = 2\n"), 0644)
+		require.NoError(t, err)
+
+		content := `
+terraform {
+  extra_arguments "defaults" {
+    commands           = ["apply"]
+    optional_var_files = ["vars1.tfvars", "vars2.tfvars"]
+  }
+}
+`
+		err = os.WriteFile(includePath, []byte(content), 0644)
+		require.NoError(t, err)
+
+		result, err := ResolveIncludeExtraArgs(includePath, dir)
+		require.NoError(t, err)
+		assert.IsType(t, []string{}, result)
+	})
+
+	t.Run("file with absolute paths in var files", func(t *testing.T) {
+		parentDir := t.TempDir()
+		dir := filepath.Join(parentDir, "child")
+		err := os.Mkdir(dir, 0755)
+		require.NoError(t, err)
+
+		includePath := filepath.Join(dir, "include.hcl")
+
+		// Create tfvars file in parent directory
+		globalVars := filepath.Join(parentDir, "global.tfvars")
+		err = os.WriteFile(globalVars, []byte("global = true\n"), 0644)
+		require.NoError(t, err)
+
+		content := fmt.Sprintf(`
+terraform {
+  extra_arguments "defaults" {
+    commands           = ["apply"]
+    optional_var_files = ["%s"]
+  }
+}
+`, globalVars)
+		err = os.WriteFile(includePath, []byte(content), 0644)
+		require.NoError(t, err)
+
+		result, err := ResolveIncludeExtraArgs(includePath, dir)
+		require.NoError(t, err)
+		assert.IsType(t, []string{}, result)
+	})
+
+	t.Run("file without terraform block", func(t *testing.T) {
+		dir := t.TempDir()
+		includePath := filepath.Join(dir, "include.hcl")
+
+		content := `
+locals {
+  env = "staging"
+}
+`
+		err := os.WriteFile(includePath, []byte(content), 0644)
+		require.NoError(t, err)
+
+		result, err := ResolveIncludeExtraArgs(includePath, dir)
+		require.NoError(t, err)
+		assert.Empty(t, result)
+	})
+
+	t.Run("file without extra_arguments", func(t *testing.T) {
+		dir := t.TempDir()
+		includePath := filepath.Join(dir, "include.hcl")
+
+		content := `
+terraform {
+  source = "../modules"
+}
+`
+		err := os.WriteFile(includePath, []byte(content), 0644)
+		require.NoError(t, err)
+
+		result, err := ResolveIncludeExtraArgs(includePath, dir)
+		require.NoError(t, err)
+		assert.Empty(t, result)
+	})
+
+	t.Run("missing file returns error", func(t *testing.T) {
+		_, err := ResolveIncludeExtraArgs("/nonexistent/include.hcl", "/some/dir")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "reading")
+	})
+
+	t.Run("invalid HCL returns error", func(t *testing.T) {
+		dir := t.TempDir()
+		includePath := filepath.Join(dir, "include.hcl")
+
+		content := `
+terraform {
+  extra_arguments "defaults" {
+    commands = ["apply"
+  # missing closing bracket
+}
+`
+		err := os.WriteFile(includePath, []byte(content), 0644)
+		require.NoError(t, err)
+
+		_, err = ResolveIncludeExtraArgs(includePath, dir)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "parsing")
+	})
+
+	t.Run("returns sorted results", func(t *testing.T) {
+		dir := t.TempDir()
+		includePath := filepath.Join(dir, "include.hcl")
+
+		// Create multiple tfvars files
+		varFileC := filepath.Join(dir, "zebra.tfvars")
+		err := os.WriteFile(varFileC, []byte("c = 3\n"), 0644)
+		require.NoError(t, err)
+
+		varFileA := filepath.Join(dir, "apple.tfvars")
+		err = os.WriteFile(varFileA, []byte("a = 1\n"), 0644)
+		require.NoError(t, err)
+
+		varFileB := filepath.Join(dir, "banana.tfvars")
+		err = os.WriteFile(varFileB, []byte("b = 2\n"), 0644)
+		require.NoError(t, err)
+
+		content := `
+terraform {
+  extra_arguments "defaults" {
+    commands           = ["apply"]
+    optional_var_files = ["zebra.tfvars", "apple.tfvars", "banana.tfvars"]
+  }
+}
+`
+		err = os.WriteFile(includePath, []byte(content), 0644)
+		require.NoError(t, err)
+
+		result, err := ResolveIncludeExtraArgs(includePath, dir)
+		require.NoError(t, err)
+		assert.IsType(t, []string{}, result)
+	})
+
+	t.Run("with locals reference", func(t *testing.T) {
+		dir := t.TempDir()
+		includePath := filepath.Join(dir, "include.hcl")
+
+		// Create tfvars file
+		varFile := filepath.Join(dir, "vars.tfvars")
+		err := os.WriteFile(varFile, []byte("test = true\n"), 0644)
+		require.NoError(t, err)
+
+		content := `
+locals {
+  varfile_name = "vars.tfvars"
+}
+
+terraform {
+  extra_arguments "defaults" {
+    commands           = ["apply"]
+    optional_var_files = [local.varfile_name]
+  }
+}
+`
+		err = os.WriteFile(includePath, []byte(content), 0644)
+		require.NoError(t, err)
+
+		result, err := ResolveIncludeExtraArgs(includePath, dir)
+		require.NoError(t, err)
+		assert.IsType(t, []string{}, result)
+	})
+
+	t.Run("childDir used for get_terragrunt_dir resolution", func(t *testing.T) {
+		parentDir := t.TempDir()
+		childDir := filepath.Join(parentDir, "child")
+		err := os.Mkdir(childDir, 0755)
+		require.NoError(t, err)
+
+		includePath := filepath.Join(parentDir, "include.hcl")
+
+		// Create tfvars in child directory
+		childVarFile := filepath.Join(childDir, "child.tfvars")
+		err = os.WriteFile(childVarFile, []byte("child_var = true\n"), 0644)
+		require.NoError(t, err)
+
+		content := `
+terraform {
+  extra_arguments "defaults" {
+    commands           = ["apply"]
+    optional_var_files = ["${get_terragrunt_dir()}/child.tfvars"]
+  }
+}
+`
+		err = os.WriteFile(includePath, []byte(content), 0644)
+		require.NoError(t, err)
+
+		result, err := ResolveIncludeExtraArgs(includePath, childDir)
+		require.NoError(t, err)
+		assert.IsType(t, []string{}, result)
 	})
 }

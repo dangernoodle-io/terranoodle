@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
@@ -213,4 +214,125 @@ func MergedIncludeInputKeys(includes []IncludeConfig, configDir string) map[stri
 		}
 	}
 	return keys
+}
+
+// ResolveIncludeExtraArgs parses an included file and evaluates its terraform.extra_arguments blocks.
+// It returns resolved paths from optional_var_files and required_var_files.
+// childDir is the directory of the child (leaf) config — it's used for get_terragrunt_dir() resolution.
+// This matches Terragrunt's behavior where get_terragrunt_dir() in an include returns the child config's dir.
+func ResolveIncludeExtraArgs(includePath string, childDir string) ([]string, error) {
+	absPath, err := filepath.Abs(includePath)
+	if err != nil {
+		return nil, fmt.Errorf("resolving include path: %w", err)
+	}
+
+	src, err := os.ReadFile(absPath)
+	if err != nil {
+		return nil, fmt.Errorf("reading include %s: %w", absPath, err)
+	}
+
+	file, diags := hclsyntax.ParseConfig(src, absPath, hcl.Pos{Line: 1, Column: 1})
+	if diags.HasErrors() {
+		return nil, fmt.Errorf("parsing include %s: %s", absPath, diags.Error())
+	}
+
+	// Build eval context with childDir for get_terragrunt_dir() — critical for correct path resolution
+	ctx := EvalContext(childDir)
+	if ctx.Variables == nil {
+		ctx.Variables = map[string]cty.Value{}
+	}
+
+	content, _, diags := file.Body.PartialContent(configFileSchema)
+	if diags.HasErrors() {
+		return nil, nil
+	}
+
+	// Evaluate locals in the included file first
+	for _, block := range content.Blocks {
+		if block.Type == "locals" {
+			locals := EvalLocals(block.Body, ctx)
+			if len(locals) > 0 {
+				ctx.Variables["local"] = cty.ObjectVal(locals)
+				break
+			}
+		}
+	}
+
+	// Find terraform blocks and extract extra_arguments
+	filePaths := make(map[string]bool)
+	for _, block := range content.Blocks {
+		if block.Type != "terraform" {
+			continue
+		}
+
+		// Find extra_arguments sub-blocks
+		extraSchema := &hcl.BodySchema{
+			Blocks: []hcl.BlockHeaderSchema{
+				{Type: "extra_arguments", LabelNames: []string{"name"}},
+			},
+		}
+		extraContent, _, diags := block.Body.PartialContent(extraSchema)
+		if diags.HasErrors() {
+			continue
+		}
+
+		for _, extraBlock := range extraContent.Blocks {
+			if extraBlock.Type != "extra_arguments" {
+				continue
+			}
+
+			extraArgSchema := &hcl.BodySchema{
+				Attributes: []hcl.AttributeSchema{
+					{Name: "optional_var_files"},
+					{Name: "required_var_files"},
+				},
+			}
+			argContent, _, diags := extraBlock.Body.PartialContent(extraArgSchema)
+			if diags.HasErrors() {
+				continue
+			}
+
+			// Evaluate optional_var_files
+			if attr, ok := argContent.Attributes["optional_var_files"]; ok {
+				val, diags := attr.Expr.Value(ctx)
+				if !diags.HasErrors() && val.IsKnown() && (val.Type().IsListType() || val.Type().IsSetType()) {
+					for _, item := range val.AsValueSlice() {
+						if item.Type() == cty.String {
+							path := item.AsString()
+							// Resolve relative to include file's directory
+							if !filepath.IsAbs(path) {
+								path = filepath.Join(filepath.Dir(absPath), path)
+							}
+							filePaths[filepath.Clean(path)] = true
+						}
+					}
+				}
+			}
+
+			// Evaluate required_var_files
+			if attr, ok := argContent.Attributes["required_var_files"]; ok {
+				val, diags := attr.Expr.Value(ctx)
+				if !diags.HasErrors() && val.IsKnown() && (val.Type().IsListType() || val.Type().IsSetType()) {
+					for _, item := range val.AsValueSlice() {
+						if item.Type() == cty.String {
+							path := item.AsString()
+							// Resolve relative to include file's directory
+							if !filepath.IsAbs(path) {
+								path = filepath.Join(filepath.Dir(absPath), path)
+							}
+							filePaths[filepath.Clean(path)] = true
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// Convert map to sorted slice
+	result := make([]string, 0, len(filePaths))
+	for path := range filePaths {
+		result = append(result, path)
+	}
+	sort.Strings(result)
+	return result, nil
 }

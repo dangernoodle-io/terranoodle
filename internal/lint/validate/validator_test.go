@@ -172,6 +172,22 @@ func TestFile_IncludeMergedInputs(t *testing.T) {
 	assert.Empty(t, errs, "merged inputs from non-exposed include should satisfy required variables")
 }
 
+func TestFile_TfVarsExtraInput(t *testing.T) {
+	errs, err := File(testdataPath("tfvars-extra-input"))
+	require.NoError(t, err)
+	require.Len(t, errs, 1)
+
+	assert.Equal(t, ExtraInput, errs[0].Kind)
+	assert.Equal(t, "repository_screts", errs[0].Variable)
+	assert.Contains(t, errs[0].Detail, "from tfvars file")
+}
+
+func TestFile_TfVarsProvidesRequired(t *testing.T) {
+	errs, err := File(testdataPath("tfvars-provides-required"))
+	require.NoError(t, err)
+	assert.Empty(t, errs, "tfvars file providing required variable should satisfy requirement")
+}
+
 func tfTestdataDir(name string) string {
 	_, file, _, _ := runtime.Caller(0)
 	return filepath.Join(filepath.Dir(file), "..", "testdata", name, "root")
@@ -271,4 +287,22 @@ func TestStackFile_Errors(t *testing.T) {
 	}
 	assert.Equal(t, 1, missing)
 	assert.Equal(t, 1, extra)
+}
+
+func TestErrorKind_String(t *testing.T) {
+	tests := []struct {
+		kind     ErrorKind
+		expected string
+	}{
+		{MissingRequired, "missing required input"},
+		{ExtraInput, "extra input"},
+		{TypeMismatch, "type mismatch"},
+		{ErrorKind(999), "unknown"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.expected, func(t *testing.T) {
+			assert.Equal(t, test.expected, test.kind.String())
+		})
+	}
 }

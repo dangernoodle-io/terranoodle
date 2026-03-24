@@ -34,6 +34,26 @@ func TestFile_MissingRequired(t *testing.T) {
 	assert.True(t, names["region"], "expected missing: region")
 }
 
+func TestFile_MissingRequiredWithTFVar(t *testing.T) {
+	t.Setenv("TF_VAR_environment", "test")
+	t.Setenv("TF_VAR_region", "us-east-1")
+
+	errs, err := File(testdataPath("missing-required"))
+	require.NoError(t, err)
+	assert.Empty(t, errs, "all required variables should be satisfied by TF_VAR_* env vars")
+}
+
+func TestFile_MissingRequiredWithPartialTFVar(t *testing.T) {
+	t.Setenv("TF_VAR_environment", "test")
+
+	errs, err := File(testdataPath("missing-required"))
+	require.NoError(t, err)
+	require.Len(t, errs, 1)
+
+	assert.Equal(t, MissingRequired, errs[0].Kind)
+	assert.Equal(t, "region", errs[0].Variable, "expected only region to be missing")
+}
+
 func TestFile_ExtraInput(t *testing.T) {
 	errs, err := File(testdataPath("extra-input"))
 	require.NoError(t, err)

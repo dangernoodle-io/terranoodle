@@ -2,8 +2,10 @@ package validate
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"dangernoodle.io/terranoodle/internal/hclutils"
 	"dangernoodle.io/terranoodle/internal/hclutils/tfmod"
@@ -42,6 +44,23 @@ type Error struct {
 	Detail   string
 }
 
+// tfVarEnvKeys returns a map of variable names parsed from TF_VAR_* environment variables.
+// For each TF_VAR_foo=bar in the environment, the key "foo" is added to the map with value true.
+func tfVarEnvKeys() map[string]bool {
+	keys := make(map[string]bool)
+	for _, env := range os.Environ() {
+		if strings.HasPrefix(env, "TF_VAR_") {
+			// Extract the variable name (everything after "TF_VAR_" up to "=")
+			rest := strings.TrimPrefix(env, "TF_VAR_")
+			if idx := strings.IndexByte(rest, '='); idx > 0 {
+				varName := rest[:idx]
+				keys[varName] = true
+			}
+		}
+	}
+	return keys
+}
+
 // File validates a single terragrunt.hcl file.
 func File(path string) ([]Error, error) {
 	absPath, err := filepath.Abs(path)
@@ -78,8 +97,9 @@ func File(path string) ([]Error, error) {
 	}
 
 	depOutputKeys := resolveDepExemptions(cfg)
+	envVarKeys := tfVarEnvKeys()
 
-	return check(absPath, cfg.Inputs, variables, depOutputKeys, cfg.EvalCtx), nil
+	return check(absPath, cfg.Inputs, variables, depOutputKeys, envVarKeys, cfg.EvalCtx), nil
 }
 
 // StackFile validates a terragrunt.stack.hcl file by checking each unit.
@@ -93,6 +113,8 @@ func StackFile(path string) ([]Error, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	envVarKeys := tfVarEnvKeys()
 
 	var allErrors []Error
 	for _, unit := range stack.Units {
@@ -116,7 +138,7 @@ func StackFile(path string) ([]Error, error) {
 		}
 
 		// Stack units don't use merge(dependency.outputs) so no dep exemptions
-		unitErrors := check(absPath, unit.Values, variables, nil, unit.EvalCtx)
+		unitErrors := check(absPath, unit.Values, variables, nil, envVarKeys, unit.EvalCtx)
 		// Tag errors with unit name for clarity
 		for i := range unitErrors {
 			unitErrors[i].Detail = fmt.Sprintf("[unit %q] %s", unit.Name, unitErrors[i].Detail)
@@ -188,6 +210,8 @@ func TerraformDir(dir string) ([]Error, error) {
 		return nil, err
 	}
 
+	envVarKeys := tfVarEnvKeys()
+
 	var allErrors []Error
 	for _, mc := range calls {
 		modulePath := hclutils.ResolveSource(mc.Source, filepath.Join(absDir, "main.tf"))
@@ -205,7 +229,7 @@ func TerraformDir(dir string) ([]Error, error) {
 			continue
 		}
 
-		mcErrors := check(absDir, mc.Inputs, variables, nil, mc.EvalCtx)
+		mcErrors := check(absDir, mc.Inputs, variables, nil, envVarKeys, mc.EvalCtx)
 		for i := range mcErrors {
 			mcErrors[i].Detail = fmt.Sprintf("[module %q] %s", mc.Name, mcErrors[i].Detail)
 		}
@@ -215,15 +239,20 @@ func TerraformDir(dir string) ([]Error, error) {
 	return allErrors, nil
 }
 
-func check(file string, inputs map[string]hcl.Expression, variables []tfmod.Variable, depOutputKeys map[string]bool, evalCtx *hcl.EvalContext) []Error {
+func check(file string, inputs map[string]hcl.Expression, variables []tfmod.Variable, depOutputKeys map[string]bool, envVarKeys map[string]bool, evalCtx *hcl.EvalContext) []Error {
 	// Build lookup sets.
 	// Dep output keys count as provided (they satisfy required variables AND
 	// are exempt from extra-input errors — Terraform silently ignores them).
-	inputKeys := make(map[string]bool, len(inputs)+len(depOutputKeys))
+	// Env var keys count as provided (they satisfy required variables but are NOT
+	// exempt from extra-input errors — they are not explicit inputs).
+	inputKeys := make(map[string]bool, len(inputs)+len(depOutputKeys)+len(envVarKeys))
 	for k := range inputs {
 		inputKeys[k] = true
 	}
 	for k := range depOutputKeys {
+		inputKeys[k] = true
+	}
+	for k := range envVarKeys {
 		inputKeys[k] = true
 	}
 

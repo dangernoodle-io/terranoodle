@@ -13,6 +13,7 @@ func TestStateMv_BinaryNotFound(t *testing.T) {
 
 	err := StateMv(context.Background(), ".", "aws_s3_bucket.old", "aws_s3_bucket.new")
 	require.Error(t, err)
+	assert.Contains(t, err.Error(), "tfexec:")
 	assert.Contains(t, err.Error(), "terraform")
 }
 
@@ -21,5 +22,6 @@ func TestTerragruntStateMv_BinaryNotFound(t *testing.T) {
 
 	err := TerragruntStateMv(context.Background(), ".", "aws_s3_bucket.old", "aws_s3_bucket.new")
 	require.Error(t, err)
+	assert.Contains(t, err.Error(), "tfexec:")
 	assert.Contains(t, err.Error(), "terragrunt")
 }

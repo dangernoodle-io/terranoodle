@@ -1,12 +1,14 @@
 package importer
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"os/exec"
 
 	tfjson "github.com/hashicorp/terraform-json"
+
+	"dangernoodle.io/terranoodle/internal/state/tfexec"
 )
 
 // CheckState runs terraform (or terragrunt when useTerragrunt is true) show -json
@@ -14,19 +16,19 @@ import (
 func CheckState(ctx context.Context, workDir string, addresses []string, useTerragrunt bool) (alreadyManaged []string, err error) {
 	var bin string
 	if useTerragrunt {
-		bin, err = tgBinary()
+		bin, err = tfexec.Binary("terragrunt")
 	} else {
-		bin, err = tfBinary()
+		bin, err = tfexec.Binary("terraform")
 	}
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("importer: %w", err)
 	}
-	cmd := exec.CommandContext(ctx, bin, "show", "-json")
-	cmd.Dir = workDir
-	out, err := cmd.Output()
-	if err != nil {
+
+	showStdout := &bytes.Buffer{}
+	if err := tfexec.Run(ctx, bin, workDir, showStdout, nil, "show", "-json"); err != nil {
 		return nil, fmt.Errorf("importer: terraform show: %w", err)
 	}
+	out := showStdout.Bytes()
 	var state tfjson.State
 	if err := json.Unmarshal(out, &state); err != nil {
 		return nil, fmt.Errorf("importer: parse state: %w", err)

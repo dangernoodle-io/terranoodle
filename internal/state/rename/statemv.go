@@ -4,36 +4,21 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
+
+	"dangernoodle.io/terranoodle/internal/state/tfexec"
 )
 
-func tfBinary() (string, error) {
-	p, err := exec.LookPath("terraform")
-	if err != nil {
-		return "", fmt.Errorf("rename: terraform binary not found in PATH: %w", err)
-	}
-	return p, nil
-}
-
-func tgBinary() (string, error) {
-	p, err := exec.LookPath("terragrunt")
-	if err != nil {
-		return "", fmt.Errorf("rename: terragrunt binary not found in PATH: %w", err)
-	}
-	return p, nil
+func stateMv(ctx context.Context, workDir, src, dst, bin string) error {
+	return tfexec.Run(ctx, bin, workDir, os.Stdout, os.Stderr, "state", "mv", src, dst)
 }
 
 // StateMv runs `terraform state mv <from> <to>` in workDir.
 func StateMv(ctx context.Context, workDir, from, to string) error {
-	bin, err := tfBinary()
+	bin, err := tfexec.Binary("terraform")
 	if err != nil {
-		return err
+		return fmt.Errorf("rename: %w", err)
 	}
-	cmd := exec.CommandContext(ctx, bin, "state", "mv", from, to)
-	cmd.Dir = workDir
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
+	if err := stateMv(ctx, workDir, from, to, bin); err != nil {
 		return fmt.Errorf("rename: terraform state mv: %w", err)
 	}
 	return nil
@@ -41,15 +26,11 @@ func StateMv(ctx context.Context, workDir, from, to string) error {
 
 // TerragruntStateMv runs `terragrunt state mv <from> <to>` in workDir.
 func TerragruntStateMv(ctx context.Context, workDir, from, to string) error {
-	bin, err := tgBinary()
+	bin, err := tfexec.Binary("terragrunt")
 	if err != nil {
-		return err
+		return fmt.Errorf("rename: %w", err)
 	}
-	cmd := exec.CommandContext(ctx, bin, "state", "mv", from, to)
-	cmd.Dir = workDir
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
+	if err := stateMv(ctx, workDir, from, to, bin); err != nil {
 		return fmt.Errorf("rename: terragrunt state mv: %w", err)
 	}
 	return nil

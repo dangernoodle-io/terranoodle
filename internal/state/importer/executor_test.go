@@ -15,6 +15,7 @@ func TestGeneratePlan_BinaryNotFound(t *testing.T) {
 
 	_, err := GeneratePlan(context.Background(), ".", false)
 	require.Error(t, err)
+	assert.Contains(t, err.Error(), "tfexec:")
 	assert.Contains(t, err.Error(), "terraform")
 }
 
@@ -23,6 +24,7 @@ func TestTerragruntGeneratePlan_BinaryNotFound(t *testing.T) {
 
 	_, err := TerragruntGeneratePlan(context.Background(), ".", false)
 	require.Error(t, err)
+	assert.Contains(t, err.Error(), "tfexec:")
 	assert.Contains(t, err.Error(), "terragrunt")
 }
 

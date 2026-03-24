@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
@@ -19,6 +21,7 @@ type TerragruntConfig struct {
 	EvalCtx          *hcl.EvalContext   // context used for evaluating input expressions
 	Path             string             // absolute path to the parsed file
 	IncludeInputKeys map[string]bool    // input keys automatically merged from parent includes
+	TfVarFiles       []string           // resolved paths to terraform var files from extra_arguments
 }
 
 // configFileSchema defines the top-level blocks we expect in a terragrunt.hcl.
@@ -39,6 +42,13 @@ var configFileSchema = &hcl.BodySchema{
 var terraformBlockSchema = &hcl.BodySchema{
 	Attributes: []hcl.AttributeSchema{
 		{Name: "source"},
+	},
+}
+
+var extraArgumentsBlockSchema = &hcl.BodySchema{
+	Attributes: []hcl.AttributeSchema{
+		{Name: "optional_var_files"},
+		{Name: "required_var_files"},
 	},
 }
 
@@ -91,10 +101,45 @@ func parseBody(body hcl.Body, path string) (*TerragruntConfig, error) {
 		}
 	}
 
+	configDir := filepath.Dir(path)
+
+	// Collect tfvars files from config and all includes
+	tfVarFileMap := make(map[string]bool)
+
+	// Add from this config's extra_arguments
+	for _, f := range extractTfVarFiles(content.Blocks, ctx, configDir) {
+		tfVarFileMap[f] = true
+	}
+
+	// Add from all includes' extra_arguments
+	for _, inc := range includes {
+		if inc.Path == "" {
+			continue
+		}
+		includePath := inc.Path
+		if !filepath.IsAbs(includePath) {
+			includePath = filepath.Join(configDir, includePath)
+		}
+		extraArgs, err := ResolveIncludeExtraArgs(includePath, configDir)
+		if err == nil {
+			for _, f := range extraArgs {
+				tfVarFileMap[f] = true
+			}
+		}
+	}
+
+	// Convert to sorted slice
+	tfVarFiles := make([]string, 0, len(tfVarFileMap))
+	for f := range tfVarFileMap {
+		tfVarFiles = append(tfVarFiles, f)
+	}
+	sort.Strings(tfVarFiles)
+
 	cfg := &TerragruntConfig{
 		Path:             path,
 		EvalCtx:          ctx,
-		IncludeInputKeys: MergedIncludeInputKeys(includes, filepath.Dir(path)),
+		IncludeInputKeys: MergedIncludeInputKeys(includes, configDir),
+		TfVarFiles:       tfVarFiles,
 	}
 
 	// Phase 4: Parse dependency blocks
@@ -126,6 +171,94 @@ func parseBody(body hcl.Body, path string) (*TerragruntConfig, error) {
 	}
 
 	return cfg, nil
+}
+
+// extractTfVarFiles finds terraform.tfvars and *.auto.tfvars files in configDir,
+// and evaluates optional_var_files/required_var_files from extra_arguments blocks.
+// Returns the resolved absolute paths.
+func extractTfVarFiles(blocks []*hcl.Block, ctx *hcl.EvalContext, configDir string) []string {
+	filePaths := make(map[string]bool)
+
+	// Auto-detect terraform.tfvars and *.auto.tfvars in configDir
+	if entries, err := os.ReadDir(configDir); err == nil {
+		for _, entry := range entries {
+			if entry.IsDir() {
+				continue
+			}
+			name := entry.Name()
+			if name == "terraform.tfvars" || strings.HasSuffix(name, ".auto.tfvars") {
+				filePaths[filepath.Join(configDir, name)] = true
+			}
+		}
+	}
+
+	// Parse extra_arguments blocks from terraform block
+	for _, block := range blocks {
+		if block.Type != "terraform" {
+			continue
+		}
+
+		// Find extra_arguments sub-blocks
+		content, _, diags := block.Body.PartialContent(&hcl.BodySchema{
+			Blocks: []hcl.BlockHeaderSchema{
+				{Type: "extra_arguments", LabelNames: []string{"name"}},
+			},
+		})
+		if diags.HasErrors() {
+			continue
+		}
+
+		for _, extraBlock := range content.Blocks {
+			if extraBlock.Type != "extra_arguments" {
+				continue
+			}
+
+			extraContent, _, diags := extraBlock.Body.PartialContent(extraArgumentsBlockSchema)
+			if diags.HasErrors() {
+				continue
+			}
+
+			// Evaluate optional_var_files
+			if attr, ok := extraContent.Attributes["optional_var_files"]; ok {
+				val, diags := attr.Expr.Value(ctx)
+				if !diags.HasErrors() && val.IsKnown() && (val.Type().IsListType() || val.Type().IsSetType()) {
+					for _, item := range val.AsValueSlice() {
+						if item.Type() == cty.String {
+							path := item.AsString()
+							if !filepath.IsAbs(path) {
+								path = filepath.Join(configDir, path)
+							}
+							filePaths[filepath.Clean(path)] = true
+						}
+					}
+				}
+			}
+
+			// Evaluate required_var_files
+			if attr, ok := extraContent.Attributes["required_var_files"]; ok {
+				val, diags := attr.Expr.Value(ctx)
+				if !diags.HasErrors() && val.IsKnown() && (val.Type().IsListType() || val.Type().IsSetType()) {
+					for _, item := range val.AsValueSlice() {
+						if item.Type() == cty.String {
+							path := item.AsString()
+							if !filepath.IsAbs(path) {
+								path = filepath.Join(configDir, path)
+							}
+							filePaths[filepath.Clean(path)] = true
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// Convert map to sorted slice
+	result := make([]string, 0, len(filePaths))
+	for path := range filePaths {
+		result = append(result, path)
+	}
+	sort.Strings(result)
+	return result
 }
 
 func extractSource(body hcl.Body, ctx *hcl.EvalContext) (string, error) {

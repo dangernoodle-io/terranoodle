@@ -51,6 +51,7 @@ homebrew_casks:
       name: homebrew-tap
       git:
         url: 'git@github.com:dangernoodle-io/homebrew-tap.git'
+        private_key: '{{ .Env.SSH_PRIVATE_KEY }}'
     directory: Casks
     homepage: https://github.com/dangernoodle-io/terranoodle
     description: Useful cli tools for OpenTofu, Terraform, and Terragrunt

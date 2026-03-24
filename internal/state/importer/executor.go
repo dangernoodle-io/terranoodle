@@ -2,13 +2,11 @@ package importer
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 )
 
 func tfBinary() (string, error) {
@@ -25,41 +23,6 @@ func tgBinary() (string, error) {
 		return "", fmt.Errorf("importer: terragrunt binary not found in PATH: %w", err)
 	}
 	return p, nil
-}
-
-// CheckVersion verifies that the terraform binary on PATH is >= 1.5.
-func CheckVersion(ctx context.Context, workDir string) error {
-	bin, err := tfBinary()
-	if err != nil {
-		return err
-	}
-	cmd := exec.CommandContext(ctx, bin, "version", "-json")
-	cmd.Dir = workDir
-	out, err := cmd.Output()
-	if err != nil {
-		return fmt.Errorf("importer: terraform version: %w", err)
-	}
-	var result struct {
-		Version string `json:"terraform_version"`
-	}
-	if err := json.Unmarshal(out, &result); err != nil {
-		return fmt.Errorf("importer: parse terraform version: %w", err)
-	}
-	parts := strings.SplitN(result.Version, ".", 3)
-	if len(parts) < 2 {
-		return fmt.Errorf("importer: unexpected version format: %s", result.Version)
-	}
-	var major, minor int
-	if _, err := fmt.Sscanf(parts[0], "%d", &major); err != nil {
-		return fmt.Errorf("importer: parse major version %q: %w", parts[0], err)
-	}
-	if _, err := fmt.Sscanf(parts[1], "%d", &minor); err != nil {
-		return fmt.Errorf("importer: parse minor version %q: %w", parts[1], err)
-	}
-	if major < 1 || (major == 1 && minor < 5) {
-		return fmt.Errorf("importer: terraform %s is below minimum required version 1.5", result.Version)
-	}
-	return nil
 }
 
 // FindTerragruntCache locates the .terragrunt-cache working directory.

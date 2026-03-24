@@ -19,6 +19,7 @@ import (
 	"dangernoodle.io/terratools/internal/state/resolver"
 	"dangernoodle.io/terratools/internal/state/scaffold"
 	"dangernoodle.io/terratools/internal/ui"
+	"dangernoodle.io/terratools/internal/version"
 )
 
 var stateCmd = &cobra.Command{
@@ -44,9 +45,10 @@ var (
 
 // Function variables for testing seams.
 var (
-	generatePlanJSONFn = generatePlanJSON
-	checkVersionFn     = importer.CheckVersion
-	checkStateFn       = func(ctx context.Context, workDir string, addrs []string, useTerragrunt bool) ([]string, error) {
+	generatePlanJSONFn       = generatePlanJSON
+	checkVersionFn           = version.CheckTerraform
+	checkTerragruntVersionFn = version.CheckTerragrunt
+	checkStateFn             = func(ctx context.Context, workDir string, addrs []string, useTerragrunt bool) ([]string, error) {
 		return importer.CheckState(ctx, workDir, addrs, useTerragrunt)
 	}
 	checkInitFn = importer.CheckInit
@@ -183,19 +185,23 @@ func runStateImport(cmd *cobra.Command, args []string) error {
 
 	useTerragrunt := detectTerragrunt(dir)
 
+	// Check terraform version.
+	if err := checkVersionFn(ctx); err != nil {
+		return err
+	}
+
 	var workDir string
 	if useTerragrunt {
+		// Check terragrunt version.
+		if err := checkTerragruntVersionFn(ctx); err != nil {
+			return err
+		}
 		workDir, err = importer.FindTerragruntCache(dir)
 		if err != nil {
 			return err
 		}
 	} else {
 		workDir = dir
-	}
-
-	// Check terraform version.
-	if err := checkVersionFn(ctx, workDir); err != nil {
-		return err
 	}
 
 	// Check init.
@@ -369,8 +375,17 @@ func runStateScaffold(cmd *cobra.Command, args []string) error {
 
 	useTerragrunt := detectTerragrunt(dir)
 
+	// Check versions.
+	if err := checkVersionFn(ctx); err != nil {
+		return err
+	}
+
 	var workDir string
 	if useTerragrunt {
+		// Check terragrunt version.
+		if err := checkTerragruntVersionFn(ctx); err != nil {
+			return err
+		}
 		workDir, err = importer.FindTerragruntCache(dir)
 		if err != nil {
 			return err

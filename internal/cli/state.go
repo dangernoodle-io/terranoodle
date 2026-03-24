@@ -16,6 +16,7 @@ import (
 	"dangernoodle.io/terranoodle/internal/state/importer"
 	"dangernoodle.io/terranoodle/internal/state/plan"
 	"dangernoodle.io/terranoodle/internal/state/prompt"
+	"dangernoodle.io/terranoodle/internal/state/rename"
 	"dangernoodle.io/terranoodle/internal/state/resolver"
 	"dangernoodle.io/terranoodle/internal/state/scaffold"
 	"dangernoodle.io/terranoodle/internal/ui"
@@ -43,6 +44,17 @@ var (
 	scaffoldFetchRegistryFlag bool
 )
 
+// state rename flags.
+var (
+	renameMovedFlag  bool
+	renameMvFlag     bool
+	renameApplyFlag  bool
+	renameDirFlag    string
+	renamePlanFlag   string
+	renameOutputFlag string
+	renameForceFlag  bool
+)
+
 // Function variables for testing seams.
 var (
 	generatePlanJSONFn       = generatePlanJSON
@@ -58,6 +70,15 @@ var (
 		}
 		return importer.Apply(ctx, workDir)
 	}
+	stateMvFn = func(ctx context.Context, workDir, from, to string, useTerragrunt bool) error {
+		if useTerragrunt {
+			return rename.TerragruntStateMv(ctx, workDir, from, to)
+		}
+		return rename.StateMv(ctx, workDir, from, to)
+	}
+	confirmCandidatesFn = func(candidates []rename.Candidate) ([]rename.RenamePair, error) {
+		return rename.ConfirmCandidates(os.Stdin, os.Stdout, candidates)
+	}
 )
 
 var stateImportCmd = &cobra.Command{
@@ -72,6 +93,12 @@ var stateScaffoldCmd = &cobra.Command{
 	RunE:  runStateScaffold,
 }
 
+var stateRenameCmd = &cobra.Command{
+	Use:   "rename",
+	Short: "Detect resource renames and generate moved blocks or execute state mv",
+	RunE:  runStateRename,
+}
+
 func init() {
 	stateImportCmd.Flags().StringVarP(&importConfigFlag, "config", "c", "", "Path to import config file (required)")
 	stateImportCmd.Flags().StringVar(&importDirFlag, "dir", "", "Working directory (default: current directory)")
@@ -84,8 +111,17 @@ func init() {
 	stateScaffoldCmd.Flags().StringVarP(&scaffoldOutputFlag, "output", "o", "", "Output file (default: stdout)")
 	stateScaffoldCmd.Flags().BoolVar(&scaffoldFetchRegistryFlag, "fetch-registry", false, "Fetch import formats from the Terraform registry")
 
+	stateRenameCmd.Flags().BoolVar(&renameMovedFlag, "moved", false, "Generate moved {} blocks")
+	stateRenameCmd.Flags().BoolVar(&renameMvFlag, "mv", false, "Execute terraform/terragrunt state mv commands")
+	stateRenameCmd.Flags().BoolVar(&renameApplyFlag, "apply", false, "Execute the operation (default: preview to stdout)")
+	stateRenameCmd.Flags().StringVar(&renameDirFlag, "dir", "", "Working directory (default: current directory)")
+	stateRenameCmd.Flags().StringVar(&renamePlanFlag, "plan", "", "Path to existing plan JSON (optional)")
+	stateRenameCmd.Flags().StringVarP(&renameOutputFlag, "output", "o", "", "Output file path (default: moved.tf)")
+	stateRenameCmd.Flags().BoolVar(&renameForceFlag, "force", false, "Overwrite existing output file")
+
 	stateCmd.AddCommand(stateImportCmd)
 	stateCmd.AddCommand(stateScaffoldCmd)
+	stateCmd.AddCommand(stateRenameCmd)
 }
 
 func resolveDir(flag string) (string, error) {
@@ -447,4 +483,116 @@ func runStateScaffold(cmd *cobra.Command, args []string) error {
 	}
 
 	return scaffold.RenderYAML(writer, types)
+}
+
+func runStateRename(cmd *cobra.Command, args []string) error {
+	if !renameMovedFlag && !renameMvFlag {
+		return fmt.Errorf("state rename: one of --moved or --mv is required")
+	}
+	if renameMovedFlag && renameMvFlag {
+		return fmt.Errorf("state rename: --moved and --mv are mutually exclusive")
+	}
+
+	ctx := context.Background()
+
+	dir, err := resolveDir(renameDirFlag)
+	if err != nil {
+		return fmt.Errorf("state rename: resolve dir: %w", err)
+	}
+
+	useTerragrunt := detectTerragrunt(dir)
+
+	if err := checkVersionFn(ctx); err != nil {
+		return err
+	}
+
+	var workDir string
+	if useTerragrunt {
+		if err := checkTerragruntVersionFn(ctx); err != nil {
+			return err
+		}
+		workDir, err = importer.FindTerragruntCache(dir)
+		if err != nil {
+			return err
+		}
+	} else {
+		workDir = dir
+		if err := checkInitFn(workDir); err != nil {
+			return err
+		}
+	}
+
+	var planJSON []byte
+	if renamePlanFlag != "" {
+		planJSON, err = os.ReadFile(renamePlanFlag)
+		if err != nil {
+			return fmt.Errorf("state rename: read plan: %w", err)
+		}
+	} else {
+		stop := ui.Spinner("Generating plan...")
+		planJSON, err = generatePlanJSONFn(ctx, workDir, useTerragrunt)
+		stop()
+		if err != nil {
+			return err
+		}
+	}
+
+	p, err := plan.Parse(bytes.NewReader(planJSON))
+	if err != nil {
+		return fmt.Errorf("state rename: parse plan: %w", err)
+	}
+
+	definite := rename.DetectFromPlan(p)
+	candidates := rename.MatchDestroyCreate(p)
+
+	var confirmed []rename.RenamePair
+	if len(candidates) > 0 {
+		confirmed, err = confirmCandidatesFn(candidates)
+		if err != nil {
+			return err
+		}
+	}
+
+	pairs := append(definite, confirmed...)
+	if len(pairs) == 0 {
+		output.Info("No renames detected")
+		return nil
+	}
+
+	if renameMovedFlag {
+		data := rename.GenerateMovedFile(pairs)
+		if !renameApplyFlag {
+			fmt.Print(string(data))
+			return nil
+		}
+		path, err := rename.WriteMovedFile(dir, renameOutputFlag, data, renameForceFlag)
+		if err != nil {
+			return err
+		}
+		output.Success("Written: %s", path)
+		return nil
+	}
+
+	// --mv mode
+	if !renameApplyFlag {
+		binary := "terraform"
+		if useTerragrunt {
+			binary = "terragrunt"
+		}
+		for _, pair := range pairs {
+			fmt.Printf("%s state mv %s %s\n", binary, pair.From, pair.To)
+		}
+		return nil
+	}
+
+	for _, pair := range pairs {
+		stop := ui.Spinner(fmt.Sprintf("Moving %s -> %s", pair.From, pair.To))
+		err = stateMvFn(ctx, workDir, pair.From, pair.To, useTerragrunt)
+		stop()
+		if err != nil {
+			return err
+		}
+	}
+	output.Success("State moves complete")
+	return nil
 }

@@ -10,6 +10,8 @@ import (
 	tfjson "github.com/hashicorp/terraform-json"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"dangernoodle.io/terranoodle/internal/state/rename"
 )
 
 // parseVarFlags tests
@@ -1357,4 +1359,334 @@ func TestRunStateScaffold_OutputToStdout(t *testing.T) {
 
 	err := runStateScaffold(stateScaffoldCmd, nil)
 	require.NoError(t, err)
+}
+
+// State rename tests
+
+func saveRenameFlags(t *testing.T) {
+	oldMoved := renameMovedFlag
+	oldMv := renameMvFlag
+	oldApply := renameApplyFlag
+	oldDir := renameDirFlag
+	oldPlan := renamePlanFlag
+	oldOutput := renameOutputFlag
+	oldForce := renameForceFlag
+	t.Cleanup(func() {
+		renameMovedFlag = oldMoved
+		renameMvFlag = oldMv
+		renameApplyFlag = oldApply
+		renameDirFlag = oldDir
+		renamePlanFlag = oldPlan
+		renameOutputFlag = oldOutput
+		renameForceFlag = oldForce
+	})
+}
+
+func saveRenameSeams(t *testing.T) {
+	oldGeneratePlan := generatePlanJSONFn
+	oldCheckVersion := checkVersionFn
+	oldCheckTgVersion := checkTerragruntVersionFn
+	oldCheckInit := checkInitFn
+	oldStateMv := stateMvFn
+	oldConfirm := confirmCandidatesFn
+	t.Cleanup(func() {
+		generatePlanJSONFn = oldGeneratePlan
+		checkVersionFn = oldCheckVersion
+		checkTerragruntVersionFn = oldCheckTgVersion
+		checkInitFn = oldCheckInit
+		stateMvFn = oldStateMv
+		confirmCandidatesFn = oldConfirm
+	})
+	checkVersionFn = func(ctx context.Context) error { return nil }
+	checkTerragruntVersionFn = func(ctx context.Context) error { return nil }
+	checkInitFn = func(workDir string) error { return nil }
+}
+
+const renamePlanWithPreviousAddress = `{
+  "format_version": "1.0",
+  "resource_changes": [
+    {
+      "address": "module.storage.aws_s3_bucket.data",
+      "previous_address": "aws_s3_bucket.data",
+      "type": "aws_s3_bucket",
+      "change": {"actions": ["no-op"]}
+    }
+  ]
+}`
+
+const renamePlanWithDestroyCreate = `{
+  "format_version": "1.0",
+  "resource_changes": [
+    {
+      "address": "aws_s3_bucket.old_name",
+      "type": "aws_s3_bucket",
+      "change": {"actions": ["delete"]}
+    },
+    {
+      "address": "aws_s3_bucket.new_name",
+      "type": "aws_s3_bucket",
+      "change": {"actions": ["create"]}
+    }
+  ]
+}`
+
+const renamePlanNoRenames = `{
+  "format_version": "1.0",
+  "resource_changes": [
+    {
+      "address": "aws_s3_bucket.example",
+      "type": "aws_s3_bucket",
+      "change": {"actions": ["no-op"]}
+    }
+  ]
+}`
+
+func TestRunStateRename_NoFlags(t *testing.T) {
+	saveRenameFlags(t)
+	renameMovedFlag = false
+	renameMvFlag = false
+
+	err := runStateRename(stateRenameCmd, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "one of --moved or --mv is required")
+}
+
+func TestRunStateRename_BothFlags(t *testing.T) {
+	saveRenameFlags(t)
+	renameMovedFlag = true
+	renameMvFlag = true
+
+	err := runStateRename(stateRenameCmd, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "mutually exclusive")
+}
+
+func TestRunStateRename_Moved_Preview(t *testing.T) {
+	tmpDir := t.TempDir()
+	err := os.MkdirAll(filepath.Join(tmpDir, ".terraform"), 0755)
+	require.NoError(t, err)
+
+	saveRenameFlags(t)
+	saveRenameSeams(t)
+
+	renameMovedFlag = true
+	renameMvFlag = false
+	renameApplyFlag = false
+	renameDirFlag = tmpDir
+	renamePlanFlag = ""
+	renameOutputFlag = ""
+	renameForceFlag = false
+
+	generatePlanJSONFn = func(ctx context.Context, workDir string, useTerragrunt bool) ([]byte, error) {
+		return []byte(renamePlanWithPreviousAddress), nil
+	}
+
+	err = runStateRename(stateRenameCmd, nil)
+	require.NoError(t, err)
+}
+
+func TestRunStateRename_Moved_Apply(t *testing.T) {
+	tmpDir := t.TempDir()
+	err := os.MkdirAll(filepath.Join(tmpDir, ".terraform"), 0755)
+	require.NoError(t, err)
+
+	saveRenameFlags(t)
+	saveRenameSeams(t)
+
+	renameMovedFlag = true
+	renameMvFlag = false
+	renameApplyFlag = true
+	renameDirFlag = tmpDir
+	renamePlanFlag = ""
+	renameOutputFlag = ""
+	renameForceFlag = false
+
+	generatePlanJSONFn = func(ctx context.Context, workDir string, useTerragrunt bool) ([]byte, error) {
+		return []byte(renamePlanWithPreviousAddress), nil
+	}
+
+	err = runStateRename(stateRenameCmd, nil)
+	require.NoError(t, err)
+
+	// Verify moved.tf was written
+	data, readErr := os.ReadFile(filepath.Join(tmpDir, "moved.tf"))
+	require.NoError(t, readErr)
+	assert.Contains(t, string(data), "moved {")
+	assert.Contains(t, string(data), "from = aws_s3_bucket.data")
+	assert.Contains(t, string(data), "to   = module.storage.aws_s3_bucket.data")
+}
+
+func TestRunStateRename_Moved_CustomOutput(t *testing.T) {
+	tmpDir := t.TempDir()
+	err := os.MkdirAll(filepath.Join(tmpDir, ".terraform"), 0755)
+	require.NoError(t, err)
+	customPath := filepath.Join(tmpDir, "custom-moved.tf")
+
+	saveRenameFlags(t)
+	saveRenameSeams(t)
+
+	renameMovedFlag = true
+	renameMvFlag = false
+	renameApplyFlag = true
+	renameDirFlag = tmpDir
+	renamePlanFlag = ""
+	renameOutputFlag = customPath
+	renameForceFlag = false
+
+	generatePlanJSONFn = func(ctx context.Context, workDir string, useTerragrunt bool) ([]byte, error) {
+		return []byte(renamePlanWithPreviousAddress), nil
+	}
+
+	err = runStateRename(stateRenameCmd, nil)
+	require.NoError(t, err)
+
+	_, statErr := os.Stat(customPath)
+	assert.NoError(t, statErr)
+}
+
+func TestRunStateRename_Mv_Preview(t *testing.T) {
+	tmpDir := t.TempDir()
+	err := os.MkdirAll(filepath.Join(tmpDir, ".terraform"), 0755)
+	require.NoError(t, err)
+
+	saveRenameFlags(t)
+	saveRenameSeams(t)
+
+	renameMovedFlag = false
+	renameMvFlag = true
+	renameApplyFlag = false
+	renameDirFlag = tmpDir
+	renamePlanFlag = ""
+
+	generatePlanJSONFn = func(ctx context.Context, workDir string, useTerragrunt bool) ([]byte, error) {
+		return []byte(renamePlanWithPreviousAddress), nil
+	}
+
+	err = runStateRename(stateRenameCmd, nil)
+	require.NoError(t, err)
+}
+
+func TestRunStateRename_Mv_Apply(t *testing.T) {
+	tmpDir := t.TempDir()
+	err := os.MkdirAll(filepath.Join(tmpDir, ".terraform"), 0755)
+	require.NoError(t, err)
+
+	saveRenameFlags(t)
+	saveRenameSeams(t)
+
+	renameMovedFlag = false
+	renameMvFlag = true
+	renameApplyFlag = true
+	renameDirFlag = tmpDir
+	renamePlanFlag = ""
+
+	generatePlanJSONFn = func(ctx context.Context, workDir string, useTerragrunt bool) ([]byte, error) {
+		return []byte(renamePlanWithPreviousAddress), nil
+	}
+
+	var mvCalls []string
+	stateMvFn = func(ctx context.Context, workDir, from, to string, useTerragrunt bool) error {
+		mvCalls = append(mvCalls, fmt.Sprintf("%s -> %s", from, to))
+		return nil
+	}
+
+	err = runStateRename(stateRenameCmd, nil)
+	require.NoError(t, err)
+	require.Len(t, mvCalls, 1)
+	assert.Equal(t, "aws_s3_bucket.data -> module.storage.aws_s3_bucket.data", mvCalls[0])
+}
+
+func TestRunStateRename_NoRenames(t *testing.T) {
+	tmpDir := t.TempDir()
+	err := os.MkdirAll(filepath.Join(tmpDir, ".terraform"), 0755)
+	require.NoError(t, err)
+
+	saveRenameFlags(t)
+	saveRenameSeams(t)
+
+	renameMovedFlag = true
+	renameMvFlag = false
+	renameApplyFlag = false
+	renameDirFlag = tmpDir
+	renamePlanFlag = ""
+
+	generatePlanJSONFn = func(ctx context.Context, workDir string, useTerragrunt bool) ([]byte, error) {
+		return []byte(renamePlanNoRenames), nil
+	}
+
+	err = runStateRename(stateRenameCmd, nil)
+	require.NoError(t, err)
+}
+
+func TestRunStateRename_PlanFromFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	err := os.MkdirAll(filepath.Join(tmpDir, ".terraform"), 0755)
+	require.NoError(t, err)
+
+	planPath := filepath.Join(tmpDir, "plan.json")
+	err = os.WriteFile(planPath, []byte(renamePlanWithPreviousAddress), 0644)
+	require.NoError(t, err)
+
+	saveRenameFlags(t)
+	saveRenameSeams(t)
+
+	renameMovedFlag = true
+	renameMvFlag = false
+	renameApplyFlag = false
+	renameDirFlag = tmpDir
+	renamePlanFlag = planPath
+
+	err = runStateRename(stateRenameCmd, nil)
+	require.NoError(t, err)
+}
+
+func TestRunStateRename_DestroyCreateCandidates(t *testing.T) {
+	tmpDir := t.TempDir()
+	err := os.MkdirAll(filepath.Join(tmpDir, ".terraform"), 0755)
+	require.NoError(t, err)
+
+	saveRenameFlags(t)
+	saveRenameSeams(t)
+
+	renameMovedFlag = true
+	renameMvFlag = false
+	renameApplyFlag = true
+	renameDirFlag = tmpDir
+	renamePlanFlag = ""
+
+	generatePlanJSONFn = func(ctx context.Context, workDir string, useTerragrunt bool) ([]byte, error) {
+		return []byte(renamePlanWithDestroyCreate), nil
+	}
+
+	confirmCandidatesFn = func(candidates []rename.Candidate) ([]rename.RenamePair, error) {
+		return []rename.RenamePair{
+			{From: "aws_s3_bucket.old_name", To: "aws_s3_bucket.new_name"},
+		}, nil
+	}
+
+	err = runStateRename(stateRenameCmd, nil)
+	require.NoError(t, err)
+
+	data, readErr := os.ReadFile(filepath.Join(tmpDir, "moved.tf"))
+	require.NoError(t, readErr)
+	assert.Contains(t, string(data), "from = aws_s3_bucket.old_name")
+	assert.Contains(t, string(data), "to   = aws_s3_bucket.new_name")
+}
+
+func TestRunStateRename_PlanFileNotFound(t *testing.T) {
+	tmpDir := t.TempDir()
+	err := os.MkdirAll(filepath.Join(tmpDir, ".terraform"), 0755)
+	require.NoError(t, err)
+
+	saveRenameFlags(t)
+	saveRenameSeams(t)
+
+	renameMovedFlag = true
+	renameMvFlag = false
+	renameDirFlag = tmpDir
+	renamePlanFlag = "/nonexistent/plan.json"
+
+	err = runStateRename(stateRenameCmd, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "read plan")
 }

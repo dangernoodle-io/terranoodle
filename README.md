@@ -22,6 +22,7 @@ terranoodle
   lint          validate terragrunt configs against terraform modules
   state
     import      generate and apply import blocks from terraform plan
+    rename      detect renames and generate moved blocks or execute state mv
     scaffold    scaffold import config YAML from existing plan
 ```
 
@@ -57,6 +58,20 @@ Generate import blocks from a terraform plan and apply them.
 | `--var` | | Override config vars, repeatable (`key=value`) |
 | `--dry-run` | | Preview import blocks without applying |
 | `--force` | | Overwrite existing `imports.tf` |
+
+### state rename
+
+Detects resource renames from a Terraform plan and generates `moved {}` blocks or executes `terraform state mv` commands. Preview is the default — use `--apply` to write files or mutate state.
+
+| Flag | Description |
+|------|-------------|
+| `--moved` | Generate `moved {}` blocks (required, or use `--mv`) |
+| `--mv` | Execute `terraform state mv` commands (required, or use `--moved`) |
+| `--apply` | Execute the operation (default: preview to stdout) |
+| `--dir` | Working directory (default: current directory) |
+| `--plan` | Path to existing plan JSON (optional, auto-generates if omitted) |
+| `--output`, `-o` | Output file path (default: `moved.tf`, only with `--moved`) |
+| `--force` | Overwrite existing output file |
 
 ### state scaffold
 

@@ -1290,11 +1290,19 @@ func TestRunStateScaffold_GeneratePlanError(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	oldGeneratePlanJSONFn := generatePlanJSONFn
-	t.Cleanup(func() { generatePlanJSONFn = oldGeneratePlanJSONFn })
+	oldCheckVersionFn := checkVersionFn
+	oldCheckTerragruntVersionFn := checkTerragruntVersionFn
+	t.Cleanup(func() {
+		generatePlanJSONFn = oldGeneratePlanJSONFn
+		checkVersionFn = oldCheckVersionFn
+		checkTerragruntVersionFn = oldCheckTerragruntVersionFn
+	})
 
 	generatePlanJSONFn = func(ctx context.Context, workDir string, useTerragrunt bool) ([]byte, error) {
 		return nil, fmt.Errorf("plan generation failed")
 	}
+	checkVersionFn = func(ctx context.Context) error { return nil }
+	checkTerragruntVersionFn = func(ctx context.Context) error { return nil }
 
 	oldDirFlag := scaffoldDirFlag
 	oldOutputFlag := scaffoldOutputFlag
@@ -1319,12 +1327,20 @@ func TestRunStateScaffold_OutputToStdout(t *testing.T) {
 
 	// Save old function seam
 	oldGeneratePlanJSONFn := generatePlanJSONFn
-	t.Cleanup(func() { generatePlanJSONFn = oldGeneratePlanJSONFn })
+	oldCheckVersionFn := checkVersionFn
+	oldCheckTerragruntVersionFn := checkTerragruntVersionFn
+	t.Cleanup(func() {
+		generatePlanJSONFn = oldGeneratePlanJSONFn
+		checkVersionFn = oldCheckVersionFn
+		checkTerragruntVersionFn = oldCheckTerragruntVersionFn
+	})
 
 	// Mock generatePlanJSONFn
 	generatePlanJSONFn = func(ctx context.Context, workDir string, useTerragrunt bool) ([]byte, error) {
 		return []byte(`{"format_version":"1.0","resource_changes":[{"address":"aws_s3_bucket.acme","type":"aws_s3_bucket","change":{"actions":["create"],"after":{"bucket":"acme-bucket"}}}]}`), nil
 	}
+	checkVersionFn = func(ctx context.Context) error { return nil }
+	checkTerragruntVersionFn = func(ctx context.Context) error { return nil }
 
 	oldDirFlag := scaffoldDirFlag
 	oldOutputFlag := scaffoldOutputFlag

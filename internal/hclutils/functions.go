@@ -20,6 +20,7 @@ func EvalContext(configPath string) *hcl.EvalContext {
 		Functions: map[string]function.Function{
 			"get_terragrunt_dir":       makeGetTerragruntDir(configDir),
 			"get_repo_root":            makeGetRepoRoot(configDir),
+			"get_path_to_repo_root":    makeGetPathToRepoRoot(configDir),
 			"get_env":                  makeGetEnv(),
 			"get_path_from_repo_root":  makeGetPathFromRepoRoot(configDir),
 			"find_in_parent_folders":   makeFindInParentFolders(configDir),
@@ -42,6 +43,20 @@ func makeGetTerragruntDir(configDir string) function.Function {
 }
 
 func makeGetRepoRoot(startDir string) function.Function {
+	return function.New(&function.Spec{
+		Params: []function.Parameter{},
+		Type:   function.StaticReturnType(cty.String),
+		Impl: func(args []cty.Value, retType cty.Type) (cty.Value, error) {
+			root, _ := findRepoRoot(startDir)
+			if root == "" {
+				root = startDir
+			}
+			return cty.StringVal(root), nil
+		},
+	})
+}
+
+func makeGetPathToRepoRoot(startDir string) function.Function {
 	return function.New(&function.Spec{
 		Params: []function.Parameter{},
 		Type:   function.StaticReturnType(cty.String),

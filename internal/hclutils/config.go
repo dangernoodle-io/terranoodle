@@ -12,12 +12,13 @@ import (
 
 // TerragruntConfig holds the parsed components of a terragrunt.hcl file.
 type TerragruntConfig struct {
-	Source       string
-	Inputs       map[string]hcl.Expression
-	DepRefs      []string           // dep names referenced via dependency.<name>.outputs in merge()
-	Dependencies []DependencyConfig // all parsed dependency blocks
-	EvalCtx      *hcl.EvalContext   // context used for evaluating input expressions
-	Path         string             // absolute path to the parsed file
+	Source           string
+	Inputs           map[string]hcl.Expression
+	DepRefs          []string           // dep names referenced via dependency.<name>.outputs in merge()
+	Dependencies     []DependencyConfig // all parsed dependency blocks
+	EvalCtx          *hcl.EvalContext   // context used for evaluating input expressions
+	Path             string             // absolute path to the parsed file
+	IncludeInputKeys map[string]bool    // input keys automatically merged from parent includes
 }
 
 // configFileSchema defines the top-level blocks we expect in a terragrunt.hcl.
@@ -90,7 +91,11 @@ func parseBody(body hcl.Body, path string) (*TerragruntConfig, error) {
 		}
 	}
 
-	cfg := &TerragruntConfig{Path: path, EvalCtx: ctx}
+	cfg := &TerragruntConfig{
+		Path:             path,
+		EvalCtx:          ctx,
+		IncludeInputKeys: MergedIncludeInputKeys(includes, filepath.Dir(path)),
+	}
 
 	// Phase 4: Parse dependency blocks
 	deps, err := ParseDependencies(content.Blocks, ctx, filepath.Dir(path))

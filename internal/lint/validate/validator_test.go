@@ -160,6 +160,18 @@ func TestFile_TypeAnySkip(t *testing.T) {
 	assert.Empty(t, errs, "type 'any' should accept everything")
 }
 
+func TestFile_IncludeExposeInputs(t *testing.T) {
+	errs, err := File(testdataPath("include-expose-inputs"))
+	require.NoError(t, err)
+	assert.Empty(t, errs, "exposed include with inputs referenced in expressions should validate clean")
+}
+
+func TestFile_IncludeMergedInputs(t *testing.T) {
+	errs, err := File(testdataPath("include-merged-inputs"))
+	require.NoError(t, err)
+	assert.Empty(t, errs, "merged inputs from non-exposed include should satisfy required variables")
+}
+
 func tfTestdataDir(name string) string {
 	_, file, _, _ := runtime.Caller(0)
 	return filepath.Join(filepath.Dir(file), "..", "testdata", name, "root")

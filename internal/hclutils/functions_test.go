@@ -28,6 +28,7 @@ func TestEvalContext(t *testing.T) {
 		requiredFuncs := []string{
 			"get_terragrunt_dir",
 			"get_repo_root",
+			"get_path_to_repo_root",
 			"get_env",
 			"get_path_from_repo_root",
 			"find_in_parent_folders",
@@ -369,6 +370,72 @@ func TestGetPathFromRepoRoot(t *testing.T) {
 		result, err := fn.Call([]cty.Value{})
 		require.NoError(t, err)
 		assert.Equal(t, "", result.AsString())
+	})
+}
+
+func TestGetPathToRepoRoot(t *testing.T) {
+	t.Run("with .git directory returns absolute path", func(t *testing.T) {
+		rootDir := t.TempDir()
+		gitDir := filepath.Join(rootDir, ".git")
+		err := os.MkdirAll(gitDir, 0755)
+		require.NoError(t, err)
+
+		subdir := filepath.Join(rootDir, "modules", "vpc")
+		err = os.MkdirAll(subdir, 0755)
+		require.NoError(t, err)
+
+		configPath := filepath.Join(subdir, "terragrunt.hcl")
+		ctx := EvalContext(configPath)
+		fn := ctx.Functions["get_path_to_repo_root"]
+
+		result, err := fn.Call([]cty.Value{})
+		require.NoError(t, err)
+		assert.Equal(t, rootDir, result.AsString())
+	})
+
+	t.Run("from repo root returns root dir", func(t *testing.T) {
+		rootDir := t.TempDir()
+		gitDir := filepath.Join(rootDir, ".git")
+		err := os.MkdirAll(gitDir, 0755)
+		require.NoError(t, err)
+
+		configPath := filepath.Join(rootDir, "terragrunt.hcl")
+		ctx := EvalContext(configPath)
+		fn := ctx.Functions["get_path_to_repo_root"]
+
+		result, err := fn.Call([]cty.Value{})
+		require.NoError(t, err)
+		assert.Equal(t, rootDir, result.AsString())
+	})
+
+	t.Run("without .git directory returns start dir", func(t *testing.T) {
+		dir := t.TempDir()
+		configPath := filepath.Join(dir, "terragrunt.hcl")
+		ctx := EvalContext(configPath)
+		fn := ctx.Functions["get_path_to_repo_root"]
+
+		result, err := fn.Call([]cty.Value{})
+		require.NoError(t, err)
+		assert.Equal(t, dir, result.AsString())
+	})
+
+	t.Run("deep nesting returns root dir", func(t *testing.T) {
+		rootDir := t.TempDir()
+		gitDir := filepath.Join(rootDir, ".git")
+		err := os.MkdirAll(gitDir, 0755)
+		require.NoError(t, err)
+
+		deepPath := filepath.Join(rootDir, "a", "b", "c", "d")
+		err = os.MkdirAll(deepPath, 0755)
+		require.NoError(t, err)
+
+		configPath := filepath.Join(deepPath, "terragrunt.hcl")
+		ctx := EvalContext(configPath)
+		fn := ctx.Functions["get_path_to_repo_root"]
+
+		result, err := fn.Call([]cty.Value{})
+		require.NoError(t, err)
+		assert.Equal(t, rootDir, result.AsString())
 	})
 }
 

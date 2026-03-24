@@ -292,4 +292,223 @@ terraform {
 		localsVal := rootVal.GetAttr("locals")
 		assert.Equal(t, cty.EmptyObjectVal, localsVal)
 	})
+
+	t.Run("exposed include with inputs", func(t *testing.T) {
+		dir := t.TempDir()
+		includePath := filepath.Join(dir, "include.hcl")
+		content := `
+inputs = {
+  region  = "us-west-2"
+  account = "acme-test-123"
+}
+`
+		err := os.WriteFile(includePath, []byte(content), 0644)
+		require.NoError(t, err)
+
+		includes := []IncludeConfig{
+			{Name: "root", Path: includePath, Expose: true},
+		}
+
+		result := BuildIncludeVariable(includes)
+		require.True(t, result.Type().IsObjectType())
+
+		// Check root.inputs exists
+		rootVal := result.GetAttr("root")
+		assert.True(t, rootVal.Type().IsObjectType())
+
+		inputsVal := rootVal.GetAttr("inputs")
+		assert.True(t, inputsVal.Type().IsObjectType())
+
+		// Verify inputs contents
+		assert.Equal(t, cty.StringVal("us-west-2"), inputsVal.GetAttr("region"))
+		assert.Equal(t, cty.StringVal("acme-test-123"), inputsVal.GetAttr("account"))
+	})
+}
+
+func TestResolveIncludeInputs(t *testing.T) {
+	t.Run("file with inputs", func(t *testing.T) {
+		dir := t.TempDir()
+		includePath := filepath.Join(dir, "include.hcl")
+		content := `
+inputs = {
+  region  = "us-east-1"
+  project = "test-project"
+}
+`
+		err := os.WriteFile(includePath, []byte(content), 0644)
+		require.NoError(t, err)
+
+		result, err := ResolveIncludeInputs(includePath)
+		require.NoError(t, err)
+		assert.True(t, result.Type().IsObjectType())
+		assert.True(t, result.IsKnown())
+
+		// Check for "region" and "project" attributes
+		regionVal := result.GetAttr("region")
+		assert.Equal(t, cty.StringVal("us-east-1"), regionVal)
+
+		projectVal := result.GetAttr("project")
+		assert.Equal(t, cty.StringVal("test-project"), projectVal)
+	})
+
+	t.Run("file with inputs referencing locals", func(t *testing.T) {
+		dir := t.TempDir()
+		includePath := filepath.Join(dir, "include.hcl")
+		content := `
+locals {
+  base_path = "/modules"
+}
+
+inputs = {
+  module_path = "${local.base_path}/compute"
+  region      = "us-west-1"
+}
+`
+		err := os.WriteFile(includePath, []byte(content), 0644)
+		require.NoError(t, err)
+
+		result, err := ResolveIncludeInputs(includePath)
+		require.NoError(t, err)
+		assert.True(t, result.Type().IsObjectType())
+
+		// Verify inputs can reference locals
+		modulePathVal := result.GetAttr("module_path")
+		assert.Equal(t, cty.StringVal("/modules/compute"), modulePathVal)
+
+		regionVal := result.GetAttr("region")
+		assert.Equal(t, cty.StringVal("us-west-1"), regionVal)
+	})
+
+	t.Run("file without inputs", func(t *testing.T) {
+		dir := t.TempDir()
+		includePath := filepath.Join(dir, "include.hcl")
+		content := `
+terraform {
+  source = "../modules"
+}
+`
+		err := os.WriteFile(includePath, []byte(content), 0644)
+		require.NoError(t, err)
+
+		result, err := ResolveIncludeInputs(includePath)
+		require.NoError(t, err)
+		assert.Equal(t, cty.EmptyObjectVal, result)
+	})
+
+	t.Run("missing file", func(t *testing.T) {
+		_, err := ResolveIncludeInputs("/nonexistent/file.hcl")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "reading")
+	})
+
+	t.Run("empty file", func(t *testing.T) {
+		dir := t.TempDir()
+		includePath := filepath.Join(dir, "include.hcl")
+		err := os.WriteFile(includePath, []byte(""), 0644)
+		require.NoError(t, err)
+
+		result, err := ResolveIncludeInputs(includePath)
+		require.NoError(t, err)
+		assert.Equal(t, cty.EmptyObjectVal, result)
+	})
+}
+
+func TestMergedIncludeInputKeys(t *testing.T) {
+	t.Run("returns keys from all includes", func(t *testing.T) {
+		dir := t.TempDir()
+
+		// Create first include with inputs
+		includePath1 := filepath.Join(dir, "include1.hcl")
+		content1 := `
+inputs = {
+  region = "us-west-2"
+  env    = "staging"
+}
+`
+		err := os.WriteFile(includePath1, []byte(content1), 0644)
+		require.NoError(t, err)
+
+		// Create second include with inputs
+		includePath2 := filepath.Join(dir, "include2.hcl")
+		content2 := `
+inputs = {
+  account = "acme-test-001"
+  project = "example"
+}
+`
+		err = os.WriteFile(includePath2, []byte(content2), 0644)
+		require.NoError(t, err)
+
+		includes := []IncludeConfig{
+			{Name: "root", Path: "include1.hcl", Expose: false}, // relative path
+			{Name: "child", Path: "include2.hcl", Expose: true}, // relative path
+		}
+
+		result := MergedIncludeInputKeys(includes, dir)
+
+		// Should contain keys from both includes regardless of expose flag
+		assert.True(t, result["region"], "expected region key")
+		assert.True(t, result["env"], "expected env key")
+		assert.True(t, result["account"], "expected account key")
+		assert.True(t, result["project"], "expected project key")
+		assert.Len(t, result, 4)
+	})
+
+	t.Run("returns empty map when no inputs", func(t *testing.T) {
+		dir := t.TempDir()
+		includePath := filepath.Join(dir, "include.hcl")
+		content := `
+terraform {
+  source = "../modules"
+}
+`
+		err := os.WriteFile(includePath, []byte(content), 0644)
+		require.NoError(t, err)
+
+		includes := []IncludeConfig{
+			{Name: "root", Path: "include.hcl", Expose: false},
+		}
+
+		result := MergedIncludeInputKeys(includes, dir)
+		assert.Empty(t, result)
+	})
+
+	t.Run("skips includes with empty path", func(t *testing.T) {
+		includes := []IncludeConfig{
+			{Name: "root", Path: "", Expose: true},
+		}
+
+		result := MergedIncludeInputKeys(includes, "/some/dir")
+		assert.Empty(t, result)
+	})
+
+	t.Run("skips includes with errors", func(t *testing.T) {
+		includes := []IncludeConfig{
+			{Name: "root", Path: "nonexistent.hcl", Expose: false},
+		}
+
+		result := MergedIncludeInputKeys(includes, "/some/dir")
+		assert.Empty(t, result)
+	})
+
+	t.Run("handles absolute paths", func(t *testing.T) {
+		dir := t.TempDir()
+		includePath := filepath.Join(dir, "include.hcl")
+		content := `
+inputs = {
+  test = "value"
+}
+`
+		err := os.WriteFile(includePath, []byte(content), 0644)
+		require.NoError(t, err)
+
+		includes := []IncludeConfig{
+			{Name: "root", Path: includePath, Expose: false}, // absolute path
+		}
+
+		result := MergedIncludeInputKeys(includes, "/other/dir")
+
+		// Should resolve the absolute path correctly
+		assert.True(t, result["test"], "expected test key")
+	})
 }

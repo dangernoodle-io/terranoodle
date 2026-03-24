@@ -106,8 +106,60 @@ func ResolveIncludeLocals(includePath string) (cty.Value, error) {
 	return cty.EmptyObjectVal, nil
 }
 
+// ResolveIncludeInputs parses an included file and evaluates its inputs attribute.
+// Returns the inputs as a cty.Value object, or cty.EmptyObjectVal if none.
+// Inputs may reference locals from the included file, so locals are evaluated first.
+func ResolveIncludeInputs(includePath string) (cty.Value, error) {
+	absPath, err := filepath.Abs(includePath)
+	if err != nil {
+		return cty.EmptyObjectVal, fmt.Errorf("resolving include path: %w", err)
+	}
+
+	src, err := os.ReadFile(absPath)
+	if err != nil {
+		return cty.EmptyObjectVal, fmt.Errorf("reading include %s: %w", absPath, err)
+	}
+
+	file, diags := hclsyntax.ParseConfig(src, absPath, hcl.Pos{Line: 1, Column: 1})
+	if diags.HasErrors() {
+		return cty.EmptyObjectVal, fmt.Errorf("parsing include %s: %s", absPath, diags.Error())
+	}
+
+	// Build an eval context for the included file (scoped to its own directory)
+	ctx := EvalContext(absPath)
+	if ctx.Variables == nil {
+		ctx.Variables = map[string]cty.Value{}
+	}
+
+	content, _, diags := file.Body.PartialContent(configFileSchema)
+	if diags.HasErrors() {
+		return cty.EmptyObjectVal, nil
+	}
+
+	// Evaluate locals in the included file first (inputs may reference them)
+	for _, block := range content.Blocks {
+		if block.Type == "locals" {
+			locals := EvalLocals(block.Body, ctx)
+			if len(locals) > 0 {
+				ctx.Variables["local"] = cty.ObjectVal(locals)
+				break
+			}
+		}
+	}
+
+	// Evaluate inputs attribute
+	if attr, ok := content.Attributes["inputs"]; ok {
+		val, diags := attr.Expr.Value(ctx)
+		if !diags.HasErrors() && val.IsKnown() && (val.Type().IsObjectType() || val.Type().IsMapType()) {
+			return val, nil
+		}
+	}
+
+	return cty.EmptyObjectVal, nil
+}
+
 // BuildIncludeVariable constructs the `include` variable for the eval context.
-// Each include with expose=true gets its locals available as include.<name>.locals.*.
+// Each include with expose=true gets its locals and inputs available as include.<name>.locals.* and include.<name>.inputs.*.
 func BuildIncludeVariable(includes []IncludeConfig) cty.Value {
 	incMap := make(map[string]cty.Value)
 
@@ -121,8 +173,14 @@ func BuildIncludeVariable(includes []IncludeConfig) cty.Value {
 			continue
 		}
 
+		inputs, err := ResolveIncludeInputs(inc.Path)
+		if err != nil {
+			inputs = cty.EmptyObjectVal
+		}
+
 		incMap[inc.Name] = cty.ObjectVal(map[string]cty.Value{
 			"locals": locals,
+			"inputs": inputs,
 		})
 	}
 
@@ -130,4 +188,29 @@ func BuildIncludeVariable(includes []IncludeConfig) cty.Value {
 		return cty.EmptyObjectVal
 	}
 	return cty.ObjectVal(incMap)
+}
+
+// MergedIncludeInputKeys returns a map of all input keys from all includes.
+// This represents inputs that are automatically merged from parent configs.
+// configDir is the directory containing the terragrunt.hcl file being parsed.
+func MergedIncludeInputKeys(includes []IncludeConfig, configDir string) map[string]bool {
+	keys := make(map[string]bool)
+	for _, inc := range includes {
+		if inc.Path == "" {
+			continue
+		}
+		// Resolve include path relative to the config directory
+		includePath := inc.Path
+		if !filepath.IsAbs(includePath) {
+			includePath = filepath.Join(configDir, includePath)
+		}
+		inputs, err := ResolveIncludeInputs(includePath)
+		if err != nil || inputs.Equals(cty.EmptyObjectVal).True() {
+			continue
+		}
+		for k := range inputs.AsValueMap() {
+			keys[k] = true
+		}
+	}
+	return keys
 }

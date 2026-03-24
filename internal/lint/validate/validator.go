@@ -99,7 +99,7 @@ func File(path string) ([]Error, error) {
 	depOutputKeys := resolveDepExemptions(cfg)
 	envVarKeys := tfVarEnvKeys()
 
-	return check(absPath, cfg.Inputs, variables, depOutputKeys, envVarKeys, cfg.EvalCtx), nil
+	return check(absPath, cfg.Inputs, variables, depOutputKeys, envVarKeys, cfg.IncludeInputKeys, cfg.EvalCtx), nil
 }
 
 // StackFile validates a terragrunt.stack.hcl file by checking each unit.
@@ -137,8 +137,8 @@ func StackFile(path string) ([]Error, error) {
 			continue
 		}
 
-		// Stack units don't use merge(dependency.outputs) so no dep exemptions
-		unitErrors := check(absPath, unit.Values, variables, nil, envVarKeys, unit.EvalCtx)
+		// Stack units don't use merge(dependency.outputs) and don't use includes
+		unitErrors := check(absPath, unit.Values, variables, nil, envVarKeys, nil, unit.EvalCtx)
 		// Tag errors with unit name for clarity
 		for i := range unitErrors {
 			unitErrors[i].Detail = fmt.Sprintf("[unit %q] %s", unit.Name, unitErrors[i].Detail)
@@ -229,7 +229,7 @@ func TerraformDir(dir string) ([]Error, error) {
 			continue
 		}
 
-		mcErrors := check(absDir, mc.Inputs, variables, nil, envVarKeys, mc.EvalCtx)
+		mcErrors := check(absDir, mc.Inputs, variables, nil, envVarKeys, nil, mc.EvalCtx)
 		for i := range mcErrors {
 			mcErrors[i].Detail = fmt.Sprintf("[module %q] %s", mc.Name, mcErrors[i].Detail)
 		}
@@ -239,13 +239,15 @@ func TerraformDir(dir string) ([]Error, error) {
 	return allErrors, nil
 }
 
-func check(file string, inputs map[string]hcl.Expression, variables []tfmod.Variable, depOutputKeys map[string]bool, envVarKeys map[string]bool, evalCtx *hcl.EvalContext) []Error {
+func check(file string, inputs map[string]hcl.Expression, variables []tfmod.Variable, depOutputKeys map[string]bool, envVarKeys map[string]bool, includeInputKeys map[string]bool, evalCtx *hcl.EvalContext) []Error {
 	// Build lookup sets.
 	// Dep output keys count as provided (they satisfy required variables AND
 	// are exempt from extra-input errors — Terraform silently ignores them).
 	// Env var keys count as provided (they satisfy required variables but are NOT
 	// exempt from extra-input errors — they are not explicit inputs).
-	inputKeys := make(map[string]bool, len(inputs)+len(depOutputKeys)+len(envVarKeys))
+	// Include input keys count as provided (they satisfy required variables but are NOT
+	// exempt from extra-input errors — they are merged from parent includes).
+	inputKeys := make(map[string]bool, len(inputs)+len(depOutputKeys)+len(envVarKeys)+len(includeInputKeys))
 	for k := range inputs {
 		inputKeys[k] = true
 	}
@@ -253,6 +255,9 @@ func check(file string, inputs map[string]hcl.Expression, variables []tfmod.Vari
 		inputKeys[k] = true
 	}
 	for k := range envVarKeys {
+		inputKeys[k] = true
+	}
+	for k := range includeInputKeys {
 		inputKeys[k] = true
 	}
 

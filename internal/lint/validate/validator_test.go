@@ -5,6 +5,7 @@ import (
 	"runtime"
 	"testing"
 
+	"dangernoodle.io/terranoodle/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -338,4 +339,45 @@ func TestErrorKind_String(t *testing.T) {
 			assert.Equal(t, test.expected, test.kind.String())
 		})
 	}
+}
+
+func TestFile_RuleFiltering(t *testing.T) {
+	// Test without config - errors should be present
+	errs, err := File(testdataPath("missing-required"))
+	require.NoError(t, err)
+	require.Len(t, errs, 2, "should have 2 missing required errors without config")
+
+	// Test with config that disables missing-required rule
+	cfg := &config.LintConfig{
+		Rules: map[string]config.RuleConfig{
+			"missing-required": {Enabled: false},
+			"extra-input":      {Enabled: true},
+			"type-mismatch":    {Enabled: true},
+		},
+	}
+	opts := Options{Config: cfg}
+	errs, err = File(testdataPath("missing-required"), opts)
+	require.NoError(t, err)
+	assert.Empty(t, errs, "errors should be filtered out when rule is disabled")
+}
+
+func TestFile_RuleFilteringMultipleKinds(t *testing.T) {
+	// Test with mixed-errors fixture that has both missing-required and extra-input
+	errs, err := File(testdataPath("mixed-errors"))
+	require.NoError(t, err)
+	require.Len(t, errs, 3, "should have 3 errors without config")
+
+	// Test with config that disables missing-required only
+	cfg := &config.LintConfig{
+		Rules: map[string]config.RuleConfig{
+			"missing-required": {Enabled: false},
+			"extra-input":      {Enabled: true},
+			"type-mismatch":    {Enabled: true},
+		},
+	}
+	opts := Options{Config: cfg}
+	errs, err = File(testdataPath("mixed-errors"), opts)
+	require.NoError(t, err)
+	require.Len(t, errs, 1, "should have only 1 extra-input error when missing-required disabled")
+	assert.Equal(t, ExtraInput, errs[0].Kind)
 }

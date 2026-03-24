@@ -46,6 +46,7 @@ func init() {
 	}
 
 	rootCmd.AddCommand(catalogCmd)
+	rootCmd.AddCommand(configCmd)
 	rootCmd.AddCommand(lintCmd)
 	rootCmd.AddCommand(stateCmd)
 }

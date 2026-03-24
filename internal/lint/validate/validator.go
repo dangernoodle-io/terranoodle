@@ -62,7 +62,7 @@ func tfVarEnvKeys() map[string]bool {
 }
 
 // File validates a single terragrunt.hcl file.
-func File(path string) ([]Error, error) {
+func File(path string, opts ...Options) ([]Error, error) {
 	absPath, err := filepath.Abs(path)
 	if err != nil {
 		return nil, fmt.Errorf("resolving path %s: %w", path, err)
@@ -100,11 +100,17 @@ func File(path string) ([]Error, error) {
 	envVarKeys := tfVarEnvKeys()
 	tfVarKeys := hclutils.ParseTfVarKeys(cfg.TfVarFiles)
 
-	return check(absPath, cfg.Inputs, variables, depOutputKeys, envVarKeys, cfg.IncludeInputKeys, tfVarKeys, cfg.EvalCtx), nil
+	var opt Options
+	if len(opts) > 0 {
+		opt = opts[0]
+	}
+
+	errs := check(absPath, cfg.Inputs, variables, depOutputKeys, envVarKeys, cfg.IncludeInputKeys, tfVarKeys, cfg.EvalCtx)
+	return filterErrors(errs, opt), nil
 }
 
 // StackFile validates a terragrunt.stack.hcl file by checking each unit.
-func StackFile(path string) ([]Error, error) {
+func StackFile(path string, opts ...Options) ([]Error, error) {
 	absPath, err := filepath.Abs(path)
 	if err != nil {
 		return nil, fmt.Errorf("resolving path %s: %w", path, err)
@@ -147,7 +153,12 @@ func StackFile(path string) ([]Error, error) {
 		allErrors = append(allErrors, unitErrors...)
 	}
 
-	return allErrors, nil
+	var opt Options
+	if len(opts) > 0 {
+		opt = opts[0]
+	}
+
+	return filterErrors(allErrors, opt), nil
 }
 
 // resolveDepExemptions builds the set of input keys that are exempt from the
@@ -200,7 +211,7 @@ func resolveDepExemptions(cfg *hclutils.TerragruntConfig) map[string]bool {
 }
 
 // TerraformDir validates all module blocks in .tf files within a directory.
-func TerraformDir(dir string) ([]Error, error) {
+func TerraformDir(dir string, opts ...Options) ([]Error, error) {
 	absDir, err := filepath.Abs(dir)
 	if err != nil {
 		return nil, fmt.Errorf("resolving path %s: %w", dir, err)
@@ -237,7 +248,12 @@ func TerraformDir(dir string) ([]Error, error) {
 		allErrors = append(allErrors, mcErrors...)
 	}
 
-	return allErrors, nil
+	var opt Options
+	if len(opts) > 0 {
+		opt = opts[0]
+	}
+
+	return filterErrors(allErrors, opt), nil
 }
 
 func check(file string, inputs map[string]hcl.Expression, variables []tfmod.Variable, depOutputKeys map[string]bool, envVarKeys map[string]bool, includeInputKeys map[string]bool, tfVarKeys map[string]bool, evalCtx *hcl.EvalContext) []Error {

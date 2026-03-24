@@ -380,21 +380,21 @@ func runStateImport(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
+	// Build API client if needed for resolvers.
+	var getter resolver.Getter
+	if cfg.API != nil && len(cfg.Resolvers) > 0 {
+		token := os.Getenv(cfg.API.TokenEnv)
+		getter = resolver.NewAPIClient(cfg.API.BaseURL, token)
+	}
+
 	// Resolve IDs via config.
-	result, err := resolver.Resolve(creates, cfg, varOverrides)
+	result, err := resolver.Resolve(creates, cfg, varOverrides, getter)
 	if err != nil {
 		return err
 	}
 
 	// Collect all import entries.
 	allEntries := result.Matched
-
-	// Build API client if needed.
-	var apiClient *resolver.APIClient
-	if cfg.API != nil {
-		token := os.Getenv(cfg.API.TokenEnv)
-		apiClient = resolver.NewAPIClient(cfg.API.BaseURL, token)
-	}
 
 	// Collect resolver names for the prompt.
 	resolverNames := make([]string, 0, len(cfg.Resolvers))
@@ -429,8 +429,8 @@ func runStateImport(cmd *cobra.Command, args []string) error {
 		var save bool
 		var resolverDef *prompt.ResolverResult
 
-		if cfg.API != nil && apiClient != nil {
-			id, save, resolverDef, err = prompt.APIAssisted(os.Stdin, os.Stdout, addr, resourceType, fields, apiClient, cfg.API.BaseURL, resolverNames, mergedVars)
+		if getter != nil {
+			id, save, resolverDef, err = prompt.APIAssisted(os.Stdin, os.Stdout, addr, resourceType, fields, getter, cfg.API.BaseURL, resolverNames, mergedVars)
 		} else {
 			id, save, err = prompt.ManualID(os.Stdin, os.Stdout, addr, resourceType, fields)
 		}

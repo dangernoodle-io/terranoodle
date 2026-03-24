@@ -32,49 +32,8 @@ type ResolverResult struct {
 //
 // Returns (id, save, nil) on success.  id is empty when the user chose to skip.
 func ManualID(r io.Reader, w io.Writer, address string, resourceType string, fields map[string]string) (id string, save bool, err error) {
-	// 1. Print available fields in deterministic order.
-	if len(fields) > 0 {
-		keys := make([]string, 0, len(fields))
-		for k := range fields {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-
-		parts := make([]string, 0, len(keys))
-		for _, k := range keys {
-			parts = append(parts, fmt.Sprintf(".%s = %q", k, fields[k]))
-		}
-		fmt.Fprintf(w, "Available fields: %s\n", strings.Join(parts, ", "))
-	}
-
-	// 2. Prompt for import ID.
-	fmt.Fprintf(w, "Enter import ID for %s (or 'skip'): ", address)
 	scanner := bufio.NewScanner(r)
-	if !scanner.Scan() {
-		if scanErr := scanner.Err(); scanErr != nil {
-			return "", false, fmt.Errorf("prompt: read: %w", scanErr)
-		}
-		// EOF — treat as skip.
-		return "", false, nil
-	}
-	line := strings.TrimSpace(scanner.Text())
-
-	// 3. Skip if requested.
-	if line == "" || strings.EqualFold(line, "skip") {
-		return "", false, nil
-	}
-	id = line
-
-	// 4. Ask whether to save as a template.
-	fmt.Fprintf(w, "Save as template for type %s? [y/N]: ", resourceType)
-	if !scanner.Scan() {
-		// EOF — treat as no.
-		return id, false, nil
-	}
-	answer := strings.TrimSpace(scanner.Text())
-	save = strings.EqualFold(answer, "y") || strings.EqualFold(answer, "yes")
-
-	return id, save, nil
+	return manualIDWithScanner(scanner, w, address, resourceType, fields)
 }
 
 // APIAssisted guides the user through an interactive flow to either enter an
@@ -91,7 +50,7 @@ func APIAssisted(
 	address string,
 	resourceType string,
 	fields map[string]string,
-	apiClient *resolver.APIClient,
+	getter resolver.Getter,
 	baseURL string,
 	existingResolvers []string,
 	vars map[string]string,
@@ -189,7 +148,7 @@ func APIAssisted(
 		fmt.Fprintf(w, "Testing: GET %s%s\n", baseURL, renderedPath)
 
 		var apiErr error
-		apiResp, apiErr = apiClient.Get(context.Background(), renderedPath)
+		apiResp, apiErr = getter.Get(context.Background(), renderedPath)
 		if apiErr != nil {
 			fmt.Fprintf(w, "Error: %v\n", apiErr)
 			fmt.Fprintln(w, "Retry (r), enter new path (n), or skip (s)?")
@@ -338,10 +297,9 @@ func APIAssisted(
 	return "$" + resolverName, doSave, result, nil
 }
 
-// SaveTypeMapping reads the YAML config at configPath, appends (or overwrites)
-// a type mapping for resourceType with the given idTemplate, and writes the
-// file back.
-func SaveTypeMapping(configPath string, resourceType string, idTemplate string) error {
+// updateConfig reads the YAML config at configPath, applies the mutate function
+// to the parsed config, marshals it, and writes it back.
+func updateConfig(configPath string, mutate func(*config.Config)) error {
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		return fmt.Errorf("prompt: read config %q: %w", configPath, err)
@@ -352,10 +310,7 @@ func SaveTypeMapping(configPath string, resourceType string, idTemplate string) 
 		return fmt.Errorf("prompt: unmarshal config %q: %w", configPath, err)
 	}
 
-	if cfg.Types == nil {
-		cfg.Types = make(map[string]config.TypeMapping)
-	}
-	cfg.Types[resourceType] = config.TypeMapping{ID: idTemplate}
+	mutate(&cfg)
 
 	out, err := yaml.Marshal(&cfg)
 	if err != nil {
@@ -369,43 +324,36 @@ func SaveTypeMapping(configPath string, resourceType string, idTemplate string) 
 	return nil
 }
 
+// SaveTypeMapping reads the YAML config at configPath, appends (or overwrites)
+// a type mapping for resourceType with the given idTemplate, and writes the
+// file back.
+func SaveTypeMapping(configPath string, resourceType string, idTemplate string) error {
+	return updateConfig(configPath, func(cfg *config.Config) {
+		if cfg.Types == nil {
+			cfg.Types = make(map[string]config.TypeMapping)
+		}
+		cfg.Types[resourceType] = config.TypeMapping{ID: idTemplate}
+	})
+}
+
 // SaveResolverAndType reads the YAML config at configPath, adds the resolver
 // and type mapping from result, and writes the file back.
 func SaveResolverAndType(configPath string, resourceType string, result *ResolverResult) error {
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		return fmt.Errorf("prompt: read config %q: %w", configPath, err)
-	}
+	return updateConfig(configPath, func(cfg *config.Config) {
+		if cfg.Resolvers == nil {
+			cfg.Resolvers = make(map[string]config.Resolver)
+		}
+		cfg.Resolvers[result.Name] = config.Resolver{
+			Use:  result.Use,
+			Get:  result.Get,
+			Pick: result.Pick,
+		}
 
-	var cfg config.Config
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return fmt.Errorf("prompt: unmarshal config %q: %w", configPath, err)
-	}
-
-	if cfg.Resolvers == nil {
-		cfg.Resolvers = make(map[string]config.Resolver)
-	}
-	cfg.Resolvers[result.Name] = config.Resolver{
-		Use:  result.Use,
-		Get:  result.Get,
-		Pick: result.Pick,
-	}
-
-	if cfg.Types == nil {
-		cfg.Types = make(map[string]config.TypeMapping)
-	}
-	cfg.Types[resourceType] = result.TypeMapping
-
-	out, err := yaml.Marshal(&cfg)
-	if err != nil {
-		return fmt.Errorf("prompt: marshal config: %w", err)
-	}
-
-	if err := os.WriteFile(configPath, out, 0o644); err != nil {
-		return fmt.Errorf("prompt: write config %q: %w", configPath, err)
-	}
-
-	return nil
+		if cfg.Types == nil {
+			cfg.Types = make(map[string]config.TypeMapping)
+		}
+		cfg.Types[resourceType] = result.TypeMapping
+	})
 }
 
 // --- helpers ---

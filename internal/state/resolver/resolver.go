@@ -3,12 +3,12 @@ package resolver
 import (
 	"context"
 	"fmt"
-	"os"
 	"sort"
 
 	tfjson "github.com/hashicorp/terraform-json"
 
 	"dangernoodle.io/terranoodle/internal/state/config"
+	"dangernoodle.io/terranoodle/internal/state/toposort"
 )
 
 // ImportEntry holds the resolved import address and ID for a single
@@ -27,15 +27,17 @@ type Result struct {
 }
 
 // Resolve maps each resource change to an import ID using the type mappings
-// in cfg. If cfg.API is set and the matched type references resolvers, each
-// resolver is executed in dependency order via the API client before the ID
+// in cfg. If getter is non-nil and the matched type references resolvers, each
+// resolver is executed in dependency order via the getter before the ID
 // template is rendered.
 //
 // varOverrides are merged on top of cfg.Vars (overrides win).
+// getter may be nil for configs without API resolvers.
 func Resolve(
 	resources []*tfjson.ResourceChange,
 	cfg *config.Config,
 	varOverrides map[string]string,
+	getter Getter,
 ) (*Result, error) {
 	// Merge vars: cfg.Vars is the base; varOverrides win on conflict.
 	merged := make(map[string]string, len(cfg.Vars)+len(varOverrides))
@@ -47,7 +49,7 @@ func Resolve(
 	}
 
 	// Determine whether any resolver will be needed at all.
-	needsAPI := cfg.API != nil && len(cfg.Resolvers) > 0
+	needsAPI := getter != nil && len(cfg.Resolvers) > 0
 
 	// Pre-compute the full execution order for resolvers (shared across all
 	// resources). The per-resource resolver set is a subset of this order.
@@ -59,9 +61,6 @@ func Resolve(
 			return nil, fmt.Errorf("resolver: %w", err)
 		}
 	}
-
-	// Lazy-create the API client only if we actually need it.
-	var client *APIClient
 
 	result := &Result{}
 
@@ -77,11 +76,6 @@ func Resolve(
 		if needsAPI && len(tm.Use) > 0 {
 			required := transitiveResolvers(tm.Use, cfg.Resolvers)
 
-			if client == nil {
-				token := os.Getenv(cfg.API.TokenEnv)
-				client = NewAPIClient(cfg.API.BaseURL, token)
-			}
-
 			for _, name := range resolverOrder {
 				if !required[name] {
 					continue
@@ -94,7 +88,7 @@ func Resolve(
 					return nil, fmt.Errorf("resolver: %s: resolver %q get: %w", rc.Address, name, err)
 				}
 
-				apiResp, err := client.Get(context.Background(), getPath)
+				apiResp, err := getter.Get(context.Background(), getPath)
 				if err != nil {
 					return nil, fmt.Errorf("resolver: %s: resolver %q: %w", rc.Address, name, err)
 				}
@@ -129,57 +123,25 @@ func Resolve(
 }
 
 // topoSortResolvers returns resolver names in execution order (dependencies
-// before dependents) using Kahn's algorithm. It returns an error only if a
+// before dependents) using topological sort. It returns an error only if a
 // cycle is detected, which should already have been caught by config.Validate.
 func topoSortResolvers(resolvers map[string]config.Resolver) ([]string, error) {
-	// inDegree counts unmet dependencies for each resolver.
-	inDegree := make(map[string]int, len(resolvers))
-	// dependents[dep] = list of resolvers that depend on dep.
-	dependents := make(map[string][]string, len(resolvers))
-
-	for name := range resolvers {
-		inDegree[name] = 0
-	}
+	// Build adjacency map: adjacency[resolver] = list of resolvers it depends on.
+	adjacency := make(map[string][]string, len(resolvers))
 
 	for name, res := range resolvers {
+		var deps []string
 		for _, dep := range res.Use {
 			if _, ok := resolvers[dep]; !ok {
 				continue // undefined ref; already caught by validator
 			}
-			inDegree[name]++
-			dependents[dep] = append(dependents[dep], name)
+			deps = append(deps, dep)
 		}
+		adjacency[name] = deps
 	}
 
-	// Seed the queue with resolvers that have no dependencies.
-	queue := make([]string, 0, len(resolvers))
-	for name, deg := range inDegree {
-		if deg == 0 {
-			queue = append(queue, name)
-		}
-	}
-	// Deterministic output within the same dependency level.
-	sort.Strings(queue)
-
-	order := make([]string, 0, len(resolvers))
-	for len(queue) > 0 {
-		node := queue[0]
-		queue = queue[1:]
-		order = append(order, node)
-
-		// Gather dependents and sort for determinism before appending to queue.
-		ready := make([]string, 0)
-		for _, dependent := range dependents[node] {
-			inDegree[dependent]--
-			if inDegree[dependent] == 0 {
-				ready = append(ready, dependent)
-			}
-		}
-		sort.Strings(ready)
-		queue = append(queue, ready...)
-	}
-
-	if len(order) != len(resolvers) {
+	order, err := toposort.Sort(adjacency)
+	if err != nil {
 		return nil, fmt.Errorf("circular dependency detected among resolvers")
 	}
 

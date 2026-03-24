@@ -9,6 +9,11 @@ import (
 	"time"
 )
 
+// Getter performs API lookups.
+type Getter interface {
+	Get(ctx context.Context, path string) (interface{}, error)
+}
+
 // APIClient is an HTTP client for resolver API lookups. Responses are cached
 // by full URL so that repeated calls within a single Resolve invocation do not
 // make redundant network requests.

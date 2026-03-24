@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/itchyny/gojq"
+
+	"dangernoodle.io/terranoodle/internal/state/toposort"
 )
 
 // Validate checks that cfg is internally consistent and returns a combined
@@ -85,61 +87,28 @@ func Validate(cfg *Config) error {
 	return nil
 }
 
-// checkResolverCycles performs a topological sort (Kahn's algorithm) over the
-// resolver dependency graph and returns an error if a cycle is detected.
+// checkResolverCycles uses topological sort to detect circular dependencies.
 func checkResolverCycles(resolvers map[string]Resolver) error {
-	// Build adjacency list and in-degree map.
-	// An edge A -> B means resolver A depends on (uses) resolver B.
-	inDegree := make(map[string]int, len(resolvers))
-	deps := make(map[string][]string, len(resolvers))
-
-	for name := range resolvers {
-		inDegree[name] = 0
-	}
+	// Build adjacency map: adjacency[resolver] = list of resolvers it depends on.
+	adjacency := make(map[string][]string, len(resolvers))
 
 	for name, res := range resolvers {
+		var deps []string
 		for _, dep := range res.Use {
 			// Only track edges between known resolvers; undefined refs are
 			// already reported by the main validator.
 			if _, ok := resolvers[dep]; !ok {
 				continue
 			}
-			deps[name] = append(deps[name], dep)
-			inDegree[dep]++
+			deps = append(deps, dep)
 		}
+		adjacency[name] = deps
 	}
 
-	// Collect nodes with zero in-degree as the starting set.
-	queue := make([]string, 0, len(resolvers))
-	for name, deg := range inDegree {
-		if deg == 0 {
-			queue = append(queue, name)
-		}
-	}
-
-	visited := 0
-	for len(queue) > 0 {
-		node := queue[0]
-		queue = queue[1:]
-		visited++
-
-		for _, dep := range deps[node] {
-			inDegree[dep]--
-			if inDegree[dep] == 0 {
-				queue = append(queue, dep)
-			}
-		}
-	}
-
-	if visited != len(resolvers) {
-		// Identify the nodes involved in cycles.
-		var cycle []string
-		for name, deg := range inDegree {
-			if deg > 0 {
-				cycle = append(cycle, name)
-			}
-		}
-		return fmt.Errorf("circular dependency detected among resolvers: %s", strings.Join(cycle, ", "))
+	// Run topological sort; if it fails, a cycle was detected.
+	_, err := toposort.Sort(adjacency)
+	if err != nil {
+		return fmt.Errorf("circular dependency detected among resolvers: %w", err)
 	}
 
 	return nil

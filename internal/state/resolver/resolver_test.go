@@ -128,7 +128,7 @@ func TestStaticTemplates(t *testing.T) {
 		),
 	}
 
-	result, err := resolver.Resolve(resources, cfg, nil)
+	result, err := resolver.Resolve(resources, cfg, nil, nil)
 	require.NoError(t, err)
 	require.Len(t, result.Matched, 1)
 	assert.Equal(t, "projects/my-project/zones/us-central1-a/instances/web-server", result.Matched[0].ID)
@@ -161,7 +161,8 @@ func TestSingleResolver(t *testing.T) {
 		),
 	}
 
-	result, err := resolver.Resolve(resources, cfg, nil)
+	client := resolver.NewAPIClient(srv.URL, "fake-token")
+	result, err := resolver.Resolve(resources, cfg, nil, client)
 	require.NoError(t, err)
 	require.Len(t, result.Matched, 1)
 	assert.Equal(t, "42", result.Matched[0].ID)
@@ -195,7 +196,8 @@ func TestChainedResolvers(t *testing.T) {
 		),
 	}
 
-	result, err := resolver.Resolve(resources, cfg, nil)
+	client := resolver.NewAPIClient(srv.URL, "fake-token")
+	result, err := resolver.Resolve(resources, cfg, nil, client)
 	require.NoError(t, err)
 	require.Len(t, result.Matched, 1)
 	assert.Equal(t, "42:99", result.Matched[0].ID)
@@ -222,7 +224,7 @@ func TestUnmatchedResources(t *testing.T) {
 			map[string]interface{}{}),
 	}
 
-	result, err := resolver.Resolve(resources, cfg, nil)
+	result, err := resolver.Resolve(resources, cfg, nil, nil)
 	require.NoError(t, err)
 	require.Len(t, result.Matched, 1)
 	assert.Equal(t, "foo", result.Matched[0].ID)
@@ -360,7 +362,8 @@ func TestGitLabResolverChain(t *testing.T) {
 		),
 	}
 
-	result, err := resolver.Resolve(resources, cfg, nil)
+	client := resolver.NewAPIClient(srv.URL, "fake")
+	result, err := resolver.Resolve(resources, cfg, nil, client)
 	require.NoError(t, err)
 	require.Len(t, result.Matched, 6)
 	assert.Empty(t, result.Unmatched)
@@ -481,7 +484,8 @@ func TestGitHubResolverChain(t *testing.T) {
 		),
 	}
 
-	result, err := resolver.Resolve(resources, cfg, nil)
+	client := resolver.NewAPIClient(srv.URL, "fake")
+	result, err := resolver.Resolve(resources, cfg, nil, client)
 	require.NoError(t, err)
 	require.Len(t, result.Matched, 5)
 	assert.Empty(t, result.Unmatched)
@@ -551,7 +555,8 @@ func TestResolverCaching(t *testing.T) {
 		),
 	}
 
-	result, err := resolver.Resolve(resources, cfg, nil)
+	client := resolver.NewAPIClient(srv.URL, "fake-token")
+	result, err := resolver.Resolve(resources, cfg, nil, client)
 	require.NoError(t, err)
 	require.Len(t, result.Matched, 2)
 
@@ -587,7 +592,7 @@ func TestVarOverrides(t *testing.T) {
 		"project": "override-project",
 	}
 
-	result, err := resolver.Resolve(resources, cfg, overrides)
+	result, err := resolver.Resolve(resources, cfg, overrides, nil)
 	require.NoError(t, err)
 	require.Len(t, result.Matched, 1)
 	// "project" should come from overrides, "region" from cfg.Vars.

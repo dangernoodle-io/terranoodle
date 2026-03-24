@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	tfjson "github.com/hashicorp/terraform-json"
+
+	"dangernoodle.io/terranoodle/internal/state/fields"
 )
 
 // TypeInfo holds scaffold data for a single resource type.
@@ -42,24 +44,15 @@ func Generate(resources []*tfjson.ResourceChange, formats map[string]string) []T
 
 		// Collect field names and one sample value from Change.After.
 		if after, ok := rc.Change.After.(map[string]interface{}); ok {
+			// Extract string-representable fields.
+			extracted := fields.ExtractStrings(after)
+			for k, v := range extracted {
+				info.Fields[k] = v
+			}
+			// Handle nil values separately (ExtractStrings skips them).
 			for k, v := range after {
 				if v == nil {
 					info.Fields[k] = ""
-					continue
-				}
-				switch val := v.(type) {
-				case string:
-					info.Fields[k] = val
-				case bool:
-					info.Fields[k] = fmt.Sprintf("%v", val)
-				case float64:
-					if val == float64(int64(val)) {
-						info.Fields[k] = fmt.Sprintf("%d", int64(val))
-					} else {
-						info.Fields[k] = fmt.Sprintf("%g", val)
-					}
-				default:
-					// skip complex nested types
 				}
 			}
 		}

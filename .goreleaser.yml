@@ -43,3 +43,19 @@ changelog:
     exclude:
       - '^docs:'
       - '^test:'
+
+brews:
+  - skip_upload: '{{ if not (envOrDefault "HOMEBREW" "") }}true{{ end }}'
+    repository:
+      owner: dangernoodle-io
+      name: homebrew-tap
+      git:
+        url: 'git@github.com:dangernoodle-io/homebrew-tap.git'
+    directory: Formula
+    homepage: https://github.com/dangernoodle-io/terranoodle
+    description: Useful cli tools for OpenTofu, Terraform, and Terragrunt
+    license: MIT
+    install: |
+      bin.install "terranoodle"
+    test: |
+      system "#{bin}/terranoodle", "version"

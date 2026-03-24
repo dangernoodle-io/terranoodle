@@ -1,4 +1,4 @@
-name: test
+name: build
 
 on:
   pull_request:
@@ -8,6 +8,6 @@ on:
       - 'README.md'
 
 jobs:
-  test:
-    uses: dangernoodle-io/.github/.github/workflows/go-test.yml@main
+  verify:
+    uses: dangernoodle-io/.github/.github/workflows/go-build.yml@main
     secrets: inherit

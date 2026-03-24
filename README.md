@@ -1,7 +1,7 @@
 # terranoodle
 
 [![Go](https://img.shields.io/badge/Go-1.26.1-00ADD8?logo=go)](https://go.dev/)
-[![Test](https://github.com/dangernoodle-io/terranoodle/actions/workflows/test.yml/badge.svg)](https://github.com/dangernoodle-io/terranoodle/actions/workflows/test.yml)
+[![Build](https://github.com/dangernoodle-io/terranoodle/actions/workflows/build.yml/badge.svg)](https://github.com/dangernoodle-io/terranoodle/actions/workflows/build.yml)
 [![Release](https://github.com/dangernoodle-io/terranoodle/actions/workflows/release.yml/badge.svg)](https://github.com/dangernoodle-io/terranoodle/actions/workflows/release.yml)
 [![Coverage Status](https://coveralls.io/repos/github/dangernoodle-io/terranoodle/badge.svg?branch=main)](https://coveralls.io/github/dangernoodle-io/terranoodle?branch=main)
 
@@ -12,6 +12,14 @@ A unified CLI for managing Terragrunt/Terraform infrastructure. terranoodle cons
 - **lint** — validate terragrunt configs against their referenced terraform modules
 
 > **Note:** terranoodle is in pre-release. The CLI interface is subject to change.
+
+## Install
+
+### Homebrew
+
+```bash
+brew install dangernoodle-io/tap/terranoodle
+```
 
 ## Commands
 

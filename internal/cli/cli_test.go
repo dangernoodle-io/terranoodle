@@ -1827,7 +1827,6 @@ func TestRunStateScaffold_TerragruntVersionError(t *testing.T) {
 	assert.Contains(t, err.Error(), "terragrunt version check failed")
 }
 
-
 func TestRunStateScaffold_FindCacheError(t *testing.T) {
 	tmpDir := t.TempDir()
 	err := os.MkdirAll(filepath.Join(tmpDir, ".terragrunt-cache"), 0755)

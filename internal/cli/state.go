@@ -234,6 +234,81 @@ func extractFields(after interface{}) map[string]string {
 	return fields
 }
 
+// workEnv holds resolved working directory and terragrunt detection state.
+type workEnv struct {
+	dir           string
+	workDir       string
+	useTerragrunt bool
+}
+
+// resolveWorkEnv resolves the working directory and detects terragrunt configuration.
+// If requireInit is true, checks that terraform is initialized in the terraform path.
+// If requireInit is false, skips the init check (used by scaffold).
+func resolveWorkEnv(ctx context.Context, dirFlag string, requireInit bool) (workEnv, error) {
+	dir, err := resolveDir(dirFlag)
+	if err != nil {
+		return workEnv{}, err
+	}
+
+	useTerragrunt := detectTerragrunt(dir)
+
+	if err := checkVersionFn(ctx); err != nil {
+		return workEnv{}, err
+	}
+
+	var workDir string
+	if useTerragrunt {
+		if err := checkTerragruntVersionFn(ctx); err != nil {
+			return workEnv{}, err
+		}
+		workDir, err = importer.FindTerragruntCache(dir)
+		if err != nil {
+			return workEnv{}, err
+		}
+	} else {
+		workDir = dir
+		if requireInit {
+			if err := checkInitFn(workDir); err != nil {
+				return workEnv{}, err
+			}
+		}
+	}
+
+	return workEnv{
+		dir:           dir,
+		workDir:       workDir,
+		useTerragrunt: useTerragrunt,
+	}, nil
+}
+
+// loadOrGeneratePlan loads a plan from a file or generates one.
+// If planFlag is set, reads from that file. Otherwise generates a plan
+// and shows a spinner. For terragrunt, plan is generated from dir;
+// for terraform, from workDir.
+func loadOrGeneratePlan(ctx context.Context, planFlag string, env workEnv) ([]byte, error) {
+	if planFlag != "" {
+		return os.ReadFile(planFlag)
+	}
+
+	planDir := env.workDir
+	if env.useTerragrunt {
+		planDir = env.dir
+	}
+
+	stopSpinner := ui.Spinner("Generating plan...")
+	planJSON, err := generatePlanJSONFn(ctx, planDir, env.useTerragrunt)
+	stopSpinner()
+	return planJSON, err
+}
+
+// binaryName returns "terragrunt" if useTerragrunt is true, otherwise "terraform".
+func binaryName(useTerragrunt bool) string {
+	if useTerragrunt {
+		return "terragrunt"
+	}
+	return "terraform"
+}
+
 func runStateImport(cmd *cobra.Command, args []string) error {
 	if !importImportFlag && !importMvFlag {
 		return fmt.Errorf("state import: one of --import or --mv is required")
@@ -259,53 +334,19 @@ func runStateImport(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Resolve working dir.
-	dir, err := resolveDir(importDirFlag)
+	// Resolve working environment.
+	env, err := resolveWorkEnv(ctx, importDirFlag, true)
 	if err != nil {
-		return fmt.Errorf("state import: resolve dir: %w", err)
-	}
-
-	useTerragrunt := detectTerragrunt(dir)
-
-	// Check terraform version.
-	if err := checkVersionFn(ctx); err != nil {
-		return err
-	}
-
-	var workDir string
-	if useTerragrunt {
-		if err := checkTerragruntVersionFn(ctx); err != nil {
-			return err
-		}
-		workDir, err = importer.FindTerragruntCache(dir)
-		if err != nil {
-			return err
-		}
-	} else {
-		workDir = dir
-		if err := checkInitFn(workDir); err != nil {
-			return err
-		}
+		return fmt.Errorf("state import: %w", err)
 	}
 
 	// Generate or load plan.
-	var planJSON []byte
-	if importPlanFlag != "" {
-		planJSON, err = os.ReadFile(importPlanFlag)
-		if err != nil {
+	planJSON, err := loadOrGeneratePlan(ctx, importPlanFlag, env)
+	if err != nil {
+		if importPlanFlag != "" {
 			return fmt.Errorf("state import: read plan: %w", err)
 		}
-	} else {
-		planDir := workDir
-		if useTerragrunt {
-			planDir = dir
-		}
-		stopSpinner := ui.Spinner("Generating plan...")
-		planJSON, err = generatePlanJSONFn(ctx, planDir, useTerragrunt)
-		stopSpinner()
-		if err != nil {
-			return err
-		}
+		return err
 	}
 
 	p, err := plan.Parse(bytes.NewReader(planJSON))
@@ -326,7 +367,7 @@ func runStateImport(cmd *cobra.Command, args []string) error {
 	}
 
 	// Check which are already managed.
-	managed, err := checkStateFn(ctx, workDir, addrs, useTerragrunt)
+	managed, err := checkStateFn(ctx, env.workDir, addrs, env.useTerragrunt)
 	if err != nil {
 		return err
 	}
@@ -428,14 +469,14 @@ func runStateImport(cmd *cobra.Command, args []string) error {
 			return nil
 		}
 
-		path, err := importer.WriteImportsFile(dir, importOutputFlag, data, importForceFlag)
+		path, err := importer.WriteImportsFile(env.dir, importOutputFlag, data, importForceFlag)
 		if err != nil {
 			return err
 		}
 		output.Info("Written: %s", path)
 
 		stopApply := ui.Spinner("Applying imports...")
-		err = applyFn(ctx, workDir, useTerragrunt)
+		err = applyFn(ctx, env.workDir, env.useTerragrunt)
 		stopApply()
 		if err != nil {
 			return err
@@ -451,24 +492,20 @@ func runStateImport(cmd *cobra.Command, args []string) error {
 
 	// --mv mode
 	if !importApplyFlag {
-		binary := "terraform"
-		if useTerragrunt {
-			binary = "terragrunt"
-		}
 		for _, e := range allEntries {
-			fmt.Printf("%s import %s %s\n", binary, output.Bold("%s", e.Address), output.Bold("%s", e.ID))
+			fmt.Printf("%s import %s %s\n", binaryName(env.useTerragrunt), output.Bold("%s", e.Address), output.Bold("%s", e.ID))
 		}
 		return nil
 	}
 
 	// --mv --apply: execute terraform import for each entry
-	importDir := workDir
-	if useTerragrunt {
-		importDir = dir
+	importDir := env.workDir
+	if env.useTerragrunt {
+		importDir = env.dir
 	}
 	for _, e := range allEntries {
 		stop := ui.Spinner(fmt.Sprintf("Importing %s", e.Address))
-		err = terraformImportFn(ctx, importDir, e.Address, e.ID, useTerragrunt)
+		err = terraformImportFn(ctx, importDir, e.Address, e.ID, env.useTerragrunt)
 		stop()
 		if err != nil {
 			return err
@@ -481,41 +518,20 @@ func runStateImport(cmd *cobra.Command, args []string) error {
 func runStateScaffold(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
 
-	// Resolve working dir.
-	dir, err := resolveDir(scaffoldDirFlag)
+	// Resolve working environment (requireInit=false for scaffold).
+	env, err := resolveWorkEnv(ctx, scaffoldDirFlag, false)
 	if err != nil {
-		return fmt.Errorf("state scaffold: resolve dir: %w", err)
-	}
-
-	useTerragrunt := detectTerragrunt(dir)
-
-	// Check versions.
-	if err := checkVersionFn(ctx); err != nil {
-		return err
-	}
-
-	var workDir string
-	if useTerragrunt {
-		// Check terragrunt version.
-		if err := checkTerragruntVersionFn(ctx); err != nil {
-			return err
-		}
-		workDir, err = importer.FindTerragruntCache(dir)
-		if err != nil {
-			return err
-		}
-	} else {
-		workDir = dir
+		return fmt.Errorf("state scaffold: %w", err)
 	}
 
 	// Generate plan. For terragrunt, run from project dir, not cache dir.
-	planDir := workDir
-	if useTerragrunt {
-		planDir = dir
+	planDir := env.workDir
+	if env.useTerragrunt {
+		planDir = env.dir
 	}
 	var planJSON []byte
 	stopSpinner := ui.Spinner("Generating plan...")
-	planJSON, err = generatePlanJSONFn(ctx, planDir, useTerragrunt)
+	planJSON, err = generatePlanJSONFn(ctx, planDir, env.useTerragrunt)
 	stopSpinner()
 	if err != nil {
 		return err
@@ -577,51 +593,19 @@ func runStateRename(cmd *cobra.Command, args []string) error {
 
 	ctx := context.Background()
 
-	dir, err := resolveDir(renameDirFlag)
+	// Resolve working environment.
+	env, err := resolveWorkEnv(ctx, renameDirFlag, true)
 	if err != nil {
-		return fmt.Errorf("state rename: resolve dir: %w", err)
+		return fmt.Errorf("state rename: %w", err)
 	}
 
-	useTerragrunt := detectTerragrunt(dir)
-
-	if err := checkVersionFn(ctx); err != nil {
-		return err
-	}
-
-	var workDir string
-	if useTerragrunt {
-		if err := checkTerragruntVersionFn(ctx); err != nil {
-			return err
-		}
-		workDir, err = importer.FindTerragruntCache(dir)
-		if err != nil {
-			return err
-		}
-	} else {
-		workDir = dir
-		if err := checkInitFn(workDir); err != nil {
-			return err
-		}
-	}
-
-	var planJSON []byte
-	if renamePlanFlag != "" {
-		planJSON, err = os.ReadFile(renamePlanFlag)
-		if err != nil {
+	// Generate or load plan.
+	planJSON, err := loadOrGeneratePlan(ctx, renamePlanFlag, env)
+	if err != nil {
+		if renamePlanFlag != "" {
 			return fmt.Errorf("state rename: read plan: %w", err)
 		}
-	} else {
-		// For terragrunt, run plan from project dir (dir), not cache dir (workDir).
-		planDir := workDir
-		if useTerragrunt {
-			planDir = dir
-		}
-		stop := ui.Spinner("Generating plan...")
-		planJSON, err = generatePlanJSONFn(ctx, planDir, useTerragrunt)
-		stop()
-		if err != nil {
-			return err
-		}
+		return err
 	}
 
 	p, err := plan.Parse(bytes.NewReader(planJSON))
@@ -652,7 +636,7 @@ func runStateRename(cmd *cobra.Command, args []string) error {
 			fmt.Print(string(data))
 			return nil
 		}
-		path, err := rename.WriteMovedFile(dir, renameOutputFlag, data, renameForceFlag)
+		path, err := rename.WriteMovedFile(env.dir, renameOutputFlag, data, renameForceFlag)
 		if err != nil {
 			return err
 		}
@@ -662,25 +646,21 @@ func runStateRename(cmd *cobra.Command, args []string) error {
 
 	// --mv mode
 	if !renameApplyFlag {
-		binary := "terraform"
-		if useTerragrunt {
-			binary = "terragrunt"
-		}
 		for _, pair := range pairs {
-			msg := fmt.Sprintf("%s state mv %s %s", binary, output.Bold("%s", pair.From), output.Bold("%s", pair.To))
+			msg := fmt.Sprintf("%s state mv %s %s", binaryName(env.useTerragrunt), output.Bold("%s", pair.From), output.Bold("%s", pair.To))
 			fmt.Println(msg)
 		}
 		return nil
 	}
 
 	// For terragrunt, run state mv from project dir (dir), not cache dir (workDir).
-	mvDir := workDir
-	if useTerragrunt {
-		mvDir = dir
+	mvDir := env.workDir
+	if env.useTerragrunt {
+		mvDir = env.dir
 	}
 	for _, pair := range pairs {
 		stop := ui.Spinner(fmt.Sprintf("Moving %s -> %s", pair.From, pair.To))
-		err = stateMvFn(ctx, mvDir, pair.From, pair.To, useTerragrunt)
+		err = stateMvFn(ctx, mvDir, pair.From, pair.To, env.useTerragrunt)
 		stop()
 		if err != nil {
 			return err
@@ -693,50 +673,19 @@ func runStateRename(cmd *cobra.Command, args []string) error {
 func runStateRemove(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
 
-	dir, err := resolveDir(removeDirFlag)
+	// Resolve working environment.
+	env, err := resolveWorkEnv(ctx, removeDirFlag, true)
 	if err != nil {
-		return fmt.Errorf("state remove: resolve dir: %w", err)
+		return fmt.Errorf("state remove: %w", err)
 	}
 
-	useTerragrunt := detectTerragrunt(dir)
-
-	if err := checkVersionFn(ctx); err != nil {
-		return err
-	}
-
-	var workDir string
-	if useTerragrunt {
-		if err := checkTerragruntVersionFn(ctx); err != nil {
-			return err
-		}
-		workDir, err = importer.FindTerragruntCache(dir)
-		if err != nil {
-			return err
-		}
-	} else {
-		workDir = dir
-		if err := checkInitFn(workDir); err != nil {
-			return err
-		}
-	}
-
-	var planJSON []byte
-	if removePlanFlag != "" {
-		planJSON, err = os.ReadFile(removePlanFlag)
-		if err != nil {
+	// Generate or load plan.
+	planJSON, err := loadOrGeneratePlan(ctx, removePlanFlag, env)
+	if err != nil {
+		if removePlanFlag != "" {
 			return fmt.Errorf("state remove: read plan: %w", err)
 		}
-	} else {
-		planDir := workDir
-		if useTerragrunt {
-			planDir = dir
-		}
-		stop := ui.Spinner("Generating plan...")
-		planJSON, err = generatePlanJSONFn(ctx, planDir, useTerragrunt)
-		stop()
-		if err != nil {
-			return err
-		}
+		return err
 	}
 
 	p, err := plan.Parse(bytes.NewReader(planJSON))
@@ -751,24 +700,20 @@ func runStateRemove(cmd *cobra.Command, args []string) error {
 	}
 
 	if !removeApplyFlag {
-		binary := "terraform"
-		if useTerragrunt {
-			binary = "terragrunt"
-		}
 		for _, t := range targets {
-			fmt.Printf("%s state rm %s\n", binary, output.Bold("%s", t.Address))
+			fmt.Printf("%s state rm %s\n", binaryName(env.useTerragrunt), output.Bold("%s", t.Address))
 		}
 		return nil
 	}
 
 	// Apply mode: run state rm for each target.
-	rmDir := workDir
-	if useTerragrunt {
-		rmDir = dir
+	rmDir := env.workDir
+	if env.useTerragrunt {
+		rmDir = env.dir
 	}
 	for _, t := range targets {
 		stop := ui.Spinner(fmt.Sprintf("Removing %s", t.Address))
-		err = stateRmFn(ctx, rmDir, t.Address, useTerragrunt)
+		err = stateRmFn(ctx, rmDir, t.Address, env.useTerragrunt)
 		stop()
 		if err != nil {
 			return err

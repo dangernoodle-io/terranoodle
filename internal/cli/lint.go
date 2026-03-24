@@ -12,8 +12,8 @@ import (
 )
 
 var (
-	lintDirFlag       string
-	lintRecursiveFlag bool
+	lintDirFlag string
+	lintAllFlag bool
 )
 
 var lintCmd = &cobra.Command{
@@ -24,7 +24,7 @@ var lintCmd = &cobra.Command{
 
 func init() {
 	lintCmd.Flags().StringVarP(&lintDirFlag, "dir", "d", "", "Directory to lint (default: current directory)")
-	lintCmd.Flags().BoolVarP(&lintRecursiveFlag, "recursive", "r", false, "Recursively lint all subdirectories")
+	lintCmd.Flags().BoolVar(&lintAllFlag, "all", false, "Lint all subdirectories")
 }
 
 func runLint(cmd *cobra.Command, args []string) error {
@@ -40,7 +40,7 @@ func runLint(cmd *cobra.Command, args []string) error {
 	var errs []validate.Error
 	var err error
 
-	if lintRecursiveFlag {
+	if lintAllFlag {
 		errs, err = validate.WalkDir(dir)
 	} else {
 		errs, err = validate.Dir(dir)

@@ -249,14 +249,14 @@ variable "labels" {
 	require.NoError(t, err)
 
 	oldDirFlag := lintDirFlag
-	oldRecursiveFlag := lintRecursiveFlag
+	oldAllFlag := lintAllFlag
 	t.Cleanup(func() {
 		lintDirFlag = oldDirFlag
-		lintRecursiveFlag = oldRecursiveFlag
+		lintAllFlag = oldAllFlag
 	})
 
 	lintDirFlag = configDir
-	lintRecursiveFlag = false
+	lintAllFlag = false
 
 	err = runLint(lintCmd, nil)
 	require.NoError(t, err)
@@ -304,14 +304,14 @@ variable "labels" {
 	require.NoError(t, err)
 
 	oldDirFlag := lintDirFlag
-	oldRecursiveFlag := lintRecursiveFlag
+	oldAllFlag := lintAllFlag
 	t.Cleanup(func() {
 		lintDirFlag = oldDirFlag
-		lintRecursiveFlag = oldRecursiveFlag
+		lintAllFlag = oldAllFlag
 	})
 
 	lintDirFlag = configDir
-	lintRecursiveFlag = false
+	lintAllFlag = false
 
 	err = runLint(lintCmd, nil)
 	assert.Error(t, err)
@@ -322,20 +322,20 @@ func TestRunLint_EmptyDir(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	oldDirFlag := lintDirFlag
-	oldRecursiveFlag := lintRecursiveFlag
+	oldAllFlag := lintAllFlag
 	t.Cleanup(func() {
 		lintDirFlag = oldDirFlag
-		lintRecursiveFlag = oldRecursiveFlag
+		lintAllFlag = oldAllFlag
 	})
 
 	lintDirFlag = tmpDir
-	lintRecursiveFlag = false
+	lintAllFlag = false
 
 	err := runLint(lintCmd, nil)
 	require.NoError(t, err)
 }
 
-func TestRunLint_Recursive(t *testing.T) {
+func TestRunLint_All(t *testing.T) {
 	tmpDir := t.TempDir()
 	configDir := tmpDir + "/config"
 	moduleDir := tmpDir + "/module"
@@ -374,14 +374,14 @@ variable "labels" {
 	require.NoError(t, err)
 
 	oldDirFlag := lintDirFlag
-	oldRecursiveFlag := lintRecursiveFlag
+	oldAllFlag := lintAllFlag
 	t.Cleanup(func() {
 		lintDirFlag = oldDirFlag
-		lintRecursiveFlag = oldRecursiveFlag
+		lintAllFlag = oldAllFlag
 	})
 
 	lintDirFlag = tmpDir
-	lintRecursiveFlag = true
+	lintAllFlag = true
 
 	err = runLint(lintCmd, nil)
 	require.NoError(t, err)
@@ -1085,14 +1085,14 @@ func TestRunStateImport_CheckInitError(t *testing.T) {
 
 func TestRunLint_DefaultDir(t *testing.T) {
 	oldDirFlag := lintDirFlag
-	oldRecursiveFlag := lintRecursiveFlag
+	oldAllFlag := lintAllFlag
 	t.Cleanup(func() {
 		lintDirFlag = oldDirFlag
-		lintRecursiveFlag = oldRecursiveFlag
+		lintAllFlag = oldAllFlag
 	})
 
 	lintDirFlag = ""
-	lintRecursiveFlag = false
+	lintAllFlag = false
 
 	err := runLint(lintCmd, nil)
 	require.NoError(t, err)

@@ -18,10 +18,10 @@ builds:
       - arm64
     binary: terranoodle
 archives:
-  - format: tar.gz
+  - formats: [tar.gz]
     format_overrides:
       - goos: darwin
-        format: zip
+        formats: [zip]
     name_template: '{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
 checksum:
   name_template: '{{ .ProjectName }}_{{ .Version }}_SHA256SUMS'
@@ -44,18 +44,16 @@ changelog:
       - '^docs:'
       - '^test:'
 
-brews:
+homebrew_casks:
   - skip_upload: '{{ if not (envOrDefault "HOMEBREW" "") }}true{{ end }}'
     repository:
       owner: dangernoodle-io
       name: homebrew-tap
       git:
         url: 'git@github.com:dangernoodle-io/homebrew-tap.git'
-    directory: Formula
+    directory: Casks
     homepage: https://github.com/dangernoodle-io/terranoodle
     description: Useful cli tools for OpenTofu, Terraform, and Terragrunt
     license: MIT
-    install: |
-      bin.install "terranoodle"
-    test: |
-      system "#{bin}/terranoodle", "version"
+    binaries:
+      - terranoodle

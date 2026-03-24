@@ -155,3 +155,42 @@ func TestFetchImportFormat_SuffixHit(t *testing.T) {
 	want := "projects/acme-project/zones/us-central1-a/instances/acme-instance"
 	assert.Equal(t, want, result)
 }
+
+func TestRenderYAML_NullField(t *testing.T) {
+	var buf strings.Builder
+	ti := TypeInfo{
+		ResourceType: "aws_example",
+		Fields: map[string]string{
+			"name": "test-val",
+			"opt":  "",
+		},
+		IDTemplate: "TODO",
+	}
+
+	err := RenderYAML(&buf, []TypeInfo{ti})
+	assert.NoError(t, err)
+
+	output := buf.String()
+	assert.Contains(t, output, ".opt = (null)")
+	assert.Contains(t, output, ".name = \"test-val\"")
+}
+
+func TestRenderYAML_Empty(t *testing.T) {
+	var buf strings.Builder
+
+	err := RenderYAML(&buf, nil)
+	assert.NoError(t, err)
+
+	output := buf.String()
+	assert.Contains(t, output, "# No resource types found")
+}
+
+func TestRenderYAML_EmptySlice(t *testing.T) {
+	var buf strings.Builder
+
+	err := RenderYAML(&buf, []TypeInfo{})
+	assert.NoError(t, err)
+
+	output := buf.String()
+	assert.Contains(t, output, "# No resource types found")
+}

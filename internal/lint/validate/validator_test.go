@@ -289,6 +289,39 @@ func TestStackFile_Errors(t *testing.T) {
 	assert.Equal(t, 1, extra)
 }
 
+func TestFile_RemoteSourceNoCache(t *testing.T) {
+	_, err := File(testdataPath("remote-no-cache"))
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot resolve remote source")
+}
+
+func TestFile_ModulePathNotFound(t *testing.T) {
+	_, err := File(testdataPath("module-path-missing"))
+	assert.Error(t, err)
+}
+
+func TestStackFile_ParseError(t *testing.T) {
+	_, err := StackFile("/nonexistent/path/terragrunt.stack.hcl")
+	assert.Error(t, err)
+}
+
+func TestTerraformDir_ParseError(t *testing.T) {
+	_, err := TerraformDir("/nonexistent/dir")
+	assert.Error(t, err)
+}
+
+func TestFile_DepSkipBadDep(t *testing.T) {
+	_, err := File(testdataPath("dep-bad-path"))
+	// Bad dependencies are skipped, but we may still have validation issues
+	// The dependency path is invalid, so it's skipped in resolveDepExemptions
+	// The child-module is valid and resolvable
+	// So err should be nil (no parse errors) and any errs should be about missing vars
+	require.NoError(t, err)
+	// The bad dependency is skipped gracefully, so we just get normal validation
+	// The inputs merge(dependency.foo.outputs, {name: "test"}) becomes just {name: "test"}
+	// which is insufficient for the required variables
+}
+
 func TestErrorKind_String(t *testing.T) {
 	tests := []struct {
 		kind     ErrorKind

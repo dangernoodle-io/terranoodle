@@ -1484,6 +1484,53 @@ func TestRunStateScaffold_OutputToStdout(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestRunStateScaffold_FetchRegistry(t *testing.T) {
+	tmpDir := t.TempDir()
+	outputPath := tmpDir + "/output.yaml"
+
+	// Save old function seams
+	oldGeneratePlanJSONFn := generatePlanJSONFn
+	oldCheckVersionFn := checkVersionFn
+	oldCheckTerragruntVersionFn := checkTerragruntVersionFn
+	t.Cleanup(func() {
+		generatePlanJSONFn = oldGeneratePlanJSONFn
+		checkVersionFn = oldCheckVersionFn
+		checkTerragruntVersionFn = oldCheckTerragruntVersionFn
+	})
+
+	// Mock generatePlanJSONFn with a null_resource (which should succeed even with registry call)
+	generatePlanJSONFn = func(ctx context.Context, workDir string, useTerragrunt bool) ([]byte, error) {
+		return []byte(`{"format_version":"1.0","resource_changes":[{"address":"null_resource.test","type":"null_resource","change":{"actions":["create"],"after":{"id":"test-id"}}}]}`), nil
+	}
+	checkVersionFn = func(ctx context.Context) error {
+		return nil
+	}
+	checkTerragruntVersionFn = func(ctx context.Context) error {
+		return nil
+	}
+
+	oldDirFlag := scaffoldDirFlag
+	oldOutputFlag := scaffoldOutputFlag
+	oldFetchRegistryFlag := scaffoldFetchRegistryFlag
+	t.Cleanup(func() {
+		scaffoldDirFlag = oldDirFlag
+		scaffoldOutputFlag = oldOutputFlag
+		scaffoldFetchRegistryFlag = oldFetchRegistryFlag
+	})
+
+	scaffoldDirFlag = tmpDir
+	scaffoldOutputFlag = outputPath
+	scaffoldFetchRegistryFlag = true
+
+	err := runStateScaffold(stateScaffoldCmd, nil)
+	require.NoError(t, err)
+
+	// Verify output file was created and contains YAML with null_resource
+	data, err := os.ReadFile(outputPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), "null_resource")
+}
+
 // State rename tests
 
 func saveRenameFlags(t *testing.T) {

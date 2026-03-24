@@ -450,3 +450,411 @@ func TestPathRelativeToInclude(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, ".", result.AsString())
 }
+
+func TestGetTerraformCommandsThatNeedVars(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "terragrunt.hcl")
+
+	ctx := EvalContext(configPath)
+	fn := ctx.Functions["get_terraform_commands_that_need_vars"]
+
+	result, err := fn.Call([]cty.Value{})
+	require.NoError(t, err)
+
+	resultList := result.AsValueSlice()
+	expectedCommands := []string{"apply", "console", "destroy", "import", "plan", "push", "refresh"}
+	require.Equal(t, len(expectedCommands), len(resultList))
+
+	for i, cmd := range expectedCommands {
+		assert.Equal(t, cmd, resultList[i].AsString())
+	}
+}
+
+func TestGetTerraformCommandsThatNeedInput(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "terragrunt.hcl")
+
+	ctx := EvalContext(configPath)
+	fn := ctx.Functions["get_terraform_commands_that_need_input"]
+
+	result, err := fn.Call([]cty.Value{})
+	require.NoError(t, err)
+
+	resultList := result.AsValueSlice()
+	expectedCommands := []string{"apply", "import", "init", "plan", "refresh"}
+	require.Equal(t, len(expectedCommands), len(resultList))
+
+	for i, cmd := range expectedCommands {
+		assert.Equal(t, cmd, resultList[i].AsString())
+	}
+}
+
+func TestGetTerraformCommandsThatNeedLocking(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "terragrunt.hcl")
+
+	ctx := EvalContext(configPath)
+	fn := ctx.Functions["get_terraform_commands_that_need_locking"]
+
+	result, err := fn.Call([]cty.Value{})
+	require.NoError(t, err)
+
+	resultList := result.AsValueSlice()
+	expectedCommands := []string{"apply", "destroy", "import", "init", "plan", "refresh", "taint", "untaint"}
+	require.Equal(t, len(expectedCommands), len(resultList))
+
+	for i, cmd := range expectedCommands {
+		assert.Equal(t, cmd, resultList[i].AsString())
+	}
+}
+
+func TestGetTerraformCommandsThatNeedParallelism(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "terragrunt.hcl")
+
+	ctx := EvalContext(configPath)
+	fn := ctx.Functions["get_terraform_commands_that_need_parallelism"]
+
+	result, err := fn.Call([]cty.Value{})
+	require.NoError(t, err)
+
+	resultList := result.AsValueSlice()
+	expectedCommands := []string{"apply", "plan", "destroy"}
+	require.Equal(t, len(expectedCommands), len(resultList))
+
+	for i, cmd := range expectedCommands {
+		assert.Equal(t, cmd, resultList[i].AsString())
+	}
+}
+
+func TestGetDefaultRetryableErrors(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "terragrunt.hcl")
+
+	ctx := EvalContext(configPath)
+	fn := ctx.Functions["get_default_retryable_errors"]
+
+	result, err := fn.Call([]cty.Value{})
+	require.NoError(t, err)
+
+	resultList := result.AsValueSlice()
+	assert.Greater(t, len(resultList), 0)
+	assert.Contains(t, []string{"RequestLimitExceeded", "RequestError", "ProvisionedThroughputExceededException", "ThrottlingException", "Throttled", "Rate exceeded", "error: resource temporarily unavailable"}, resultList[0].AsString())
+}
+
+func TestGetPlatform(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "terragrunt.hcl")
+
+	ctx := EvalContext(configPath)
+	fn := ctx.Functions["get_platform"]
+
+	result, err := fn.Call([]cty.Value{})
+	require.NoError(t, err)
+
+	platform := result.AsString()
+	assert.NotEmpty(t, platform)
+	assert.True(t, platform == "linux" || platform == "darwin" || platform == "windows")
+}
+
+func TestGetWorkingDir(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "terragrunt.hcl")
+
+	ctx := EvalContext(configPath)
+	fn := ctx.Functions["get_working_dir"]
+
+	result, err := fn.Call([]cty.Value{})
+	require.NoError(t, err)
+
+	wd := result.AsString()
+	assert.NotEmpty(t, wd)
+}
+
+func TestPathRelativeFromInclude(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "terragrunt.hcl")
+
+	ctx := EvalContext(configPath)
+	fn := ctx.Functions["path_relative_from_include"]
+
+	result, err := fn.Call([]cty.Value{})
+	require.NoError(t, err)
+	assert.Equal(t, ".", result.AsString())
+}
+
+func TestGetParentTerragruntDir(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "terragrunt.hcl")
+
+	ctx := EvalContext(configPath)
+	fn := ctx.Functions["get_parent_terragrunt_dir"]
+
+	result, err := fn.Call([]cty.Value{})
+	require.NoError(t, err)
+	assert.Equal(t, dir, result.AsString())
+}
+
+func TestGetOriginalTerragruntDir(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "terragrunt.hcl")
+
+	ctx := EvalContext(configPath)
+	fn := ctx.Functions["get_original_terragrunt_dir"]
+
+	result, err := fn.Call([]cty.Value{})
+	require.NoError(t, err)
+	assert.Equal(t, dir, result.AsString())
+}
+
+func TestReadTfvarsFile(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "terragrunt.hcl")
+
+	ctx := EvalContext(configPath)
+	fn := ctx.Functions["read_tfvars_file"]
+
+	t.Run("empty path returns empty object", func(t *testing.T) {
+		result, err := fn.Call([]cty.Value{cty.StringVal("")})
+		require.NoError(t, err)
+		assert.Equal(t, cty.EmptyObjectVal, result)
+	})
+
+	t.Run("nonexistent file returns empty object", func(t *testing.T) {
+		result, err := fn.Call([]cty.Value{cty.StringVal("/nonexistent/path.tfvars")})
+		require.NoError(t, err)
+		assert.Equal(t, cty.EmptyObjectVal, result)
+	})
+
+	t.Run("parses valid HCL file", func(t *testing.T) {
+		tfvarsFile := filepath.Join(dir, "test.tfvars")
+		content := `region = "us-west-2"
+environment = "test-env"`
+		err := os.WriteFile(tfvarsFile, []byte(content), 0644)
+		require.NoError(t, err)
+
+		result, err := fn.Call([]cty.Value{cty.StringVal(tfvarsFile)})
+		require.NoError(t, err)
+		assert.NotEqual(t, cty.EmptyObjectVal, result)
+	})
+}
+
+func TestGetAwsAccountId(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "terragrunt.hcl")
+
+	ctx := EvalContext(configPath)
+	fn := ctx.Functions["get_aws_account_id"]
+
+	result, err := fn.Call([]cty.Value{})
+	require.NoError(t, err)
+	assert.Equal(t, "000000000000", result.AsString())
+}
+
+func TestGetAwsAccountAlias(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "terragrunt.hcl")
+
+	ctx := EvalContext(configPath)
+	fn := ctx.Functions["get_aws_account_alias"]
+
+	result, err := fn.Call([]cty.Value{})
+	require.NoError(t, err)
+	assert.Equal(t, "lint-placeholder", result.AsString())
+}
+
+func TestGetAwsCallerIdentityArn(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "terragrunt.hcl")
+
+	ctx := EvalContext(configPath)
+	fn := ctx.Functions["get_aws_caller_identity_arn"]
+
+	result, err := fn.Call([]cty.Value{})
+	require.NoError(t, err)
+	assert.Equal(t, "arn:aws:iam::000000000000:user/lint-placeholder", result.AsString())
+}
+
+func TestGetAwsCallerIdentityUserId(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "terragrunt.hcl")
+
+	ctx := EvalContext(configPath)
+	fn := ctx.Functions["get_aws_caller_identity_user_id"]
+
+	result, err := fn.Call([]cty.Value{})
+	require.NoError(t, err)
+	assert.Equal(t, "LINT000000000000000", result.AsString())
+}
+
+func TestRunCmd(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "terragrunt.hcl")
+
+	ctx := EvalContext(configPath)
+	fn := ctx.Functions["run_cmd"]
+
+	t.Run("with no args", func(t *testing.T) {
+		result, err := fn.Call([]cty.Value{})
+		require.NoError(t, err)
+		assert.Equal(t, "", result.AsString())
+	})
+
+	t.Run("with args", func(t *testing.T) {
+		result, err := fn.Call([]cty.Value{
+			cty.StringVal("echo"),
+			cty.StringVal("hello"),
+		})
+		require.NoError(t, err)
+		assert.Equal(t, "", result.AsString())
+	})
+}
+
+func TestSopsDecryptFile(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "terragrunt.hcl")
+
+	ctx := EvalContext(configPath)
+	fn := ctx.Functions["sops_decrypt_file"]
+
+	result, err := fn.Call([]cty.Value{cty.StringVal("/path/to/encrypted.yaml")})
+	require.NoError(t, err)
+	assert.Equal(t, "", result.AsString())
+}
+
+func TestGetTerraformCommand(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "terragrunt.hcl")
+
+	ctx := EvalContext(configPath)
+	fn := ctx.Functions["get_terraform_command"]
+
+	result, err := fn.Call([]cty.Value{})
+	require.NoError(t, err)
+	assert.Equal(t, "plan", result.AsString())
+}
+
+func TestGetTerraformCliArgs(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "terragrunt.hcl")
+
+	ctx := EvalContext(configPath)
+	fn := ctx.Functions["get_terraform_cli_args"]
+
+	result, err := fn.Call([]cty.Value{})
+	require.NoError(t, err)
+
+	resultList := result.AsValueSlice()
+	assert.Equal(t, 0, len(resultList))
+}
+
+func TestGetTerragruntSourceCliFlag(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "terragrunt.hcl")
+
+	ctx := EvalContext(configPath)
+	fn := ctx.Functions["get_terragrunt_source_cli_flag"]
+
+	result, err := fn.Call([]cty.Value{})
+	require.NoError(t, err)
+	assert.Equal(t, "", result.AsString())
+}
+
+func TestConstraintCheck(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "terragrunt.hcl")
+
+	ctx := EvalContext(configPath)
+	fn := ctx.Functions["constraint_check"]
+
+	t.Run("with no args", func(t *testing.T) {
+		result, err := fn.Call([]cty.Value{})
+		require.NoError(t, err)
+		assert.Equal(t, true, result.True())
+	})
+
+	t.Run("with args", func(t *testing.T) {
+		result, err := fn.Call([]cty.Value{
+			cty.StringVal("constraint"),
+			cty.StringVal("requirement"),
+		})
+		require.NoError(t, err)
+		assert.Equal(t, true, result.True())
+	})
+}
+
+func TestMarkAsRead(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "terragrunt.hcl")
+
+	ctx := EvalContext(configPath)
+	fn := ctx.Functions["mark_as_read"]
+
+	t.Run("returns string unchanged", func(t *testing.T) {
+		result, err := fn.Call([]cty.Value{cty.StringVal("test-value")})
+		require.NoError(t, err)
+		assert.Equal(t, "test-value", result.AsString())
+	})
+
+	t.Run("returns number unchanged", func(t *testing.T) {
+		result, err := fn.Call([]cty.Value{cty.NumberIntVal(42)})
+		require.NoError(t, err)
+		resultInt, _ := result.AsBigFloat().Int64()
+		assert.Equal(t, int64(42), resultInt)
+	})
+
+	t.Run("returns bool unchanged", func(t *testing.T) {
+		result, err := fn.Call([]cty.Value{cty.True})
+		require.NoError(t, err)
+		assert.Equal(t, true, result.True())
+	})
+}
+
+func TestEvalContextHasAllFunctions(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "terragrunt.hcl")
+
+	ctx := EvalContext(configPath)
+
+	requiredFuncs := []string{
+		"get_terragrunt_dir",
+		"get_repo_root",
+		"get_path_to_repo_root",
+		"get_env",
+		"get_path_from_repo_root",
+		"find_in_parent_folders",
+		"basename",
+		"replace",
+		"path_relative_to_include",
+		"read_terragrunt_config",
+		"get_terraform_commands_that_need_vars",
+		"get_terraform_commands_that_need_input",
+		"get_terraform_commands_that_need_locking",
+		"get_terraform_commands_that_need_parallelism",
+		"get_default_retryable_errors",
+		"get_platform",
+		"get_working_dir",
+		"path_relative_from_include",
+		"get_parent_terragrunt_dir",
+		"get_original_terragrunt_dir",
+		"read_tfvars_file",
+		"get_aws_account_id",
+		"get_aws_account_alias",
+		"get_aws_caller_identity_arn",
+		"get_aws_caller_identity_user_id",
+		"run_cmd",
+		"sops_decrypt_file",
+		"get_terraform_command",
+		"get_terraform_cli_args",
+		"get_terragrunt_source_cli_flag",
+		"constraint_check",
+		"mark_as_read",
+	}
+
+	for _, fn := range requiredFuncs {
+		assert.Contains(t, ctx.Functions, fn, "missing function: %s", fn)
+	}
+
+	// Should have exactly the required functions
+	assert.Equal(t, len(requiredFuncs), len(ctx.Functions), "function count mismatch")
+}

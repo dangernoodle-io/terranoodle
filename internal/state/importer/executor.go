@@ -166,3 +166,35 @@ func TerragruntGeneratePlan(ctx context.Context, workDir string, verbose bool) (
 	}
 	return out, nil
 }
+
+// TerraformImport runs `terraform import <addr> <id>` in workDir.
+func TerraformImport(ctx context.Context, workDir, addr, id string) error {
+	bin, err := tfBinary()
+	if err != nil {
+		return err
+	}
+	cmd := exec.CommandContext(ctx, bin, "import", addr, id)
+	cmd.Dir = workDir
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("importer: terraform import: %w", err)
+	}
+	return nil
+}
+
+// TerragruntImport runs `terragrunt import <addr> <id>` in workDir.
+func TerragruntImport(ctx context.Context, workDir, addr, id string) error {
+	bin, err := tgBinary()
+	if err != nil {
+		return err
+	}
+	cmd := exec.CommandContext(ctx, bin, "import", addr, id)
+	cmd.Dir = workDir
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("importer: terragrunt import: %w", err)
+	}
+	return nil
+}

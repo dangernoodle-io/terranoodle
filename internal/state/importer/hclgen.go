@@ -23,10 +23,14 @@ func GenerateImportsFile(entries []resolver.ImportEntry) []byte {
 	return buf.Bytes()
 }
 
-// WriteImportsFile writes data to <dir>/imports.tf and returns the full path.
+// WriteImportsFile writes data to the specified path and returns the full path.
+// If outputFlag is empty, defaults to <dir>/imports.tf.
 // It returns an error if the file already exists and force is false.
-func WriteImportsFile(dir string, data []byte, force bool) (string, error) {
-	path := filepath.Join(dir, "imports.tf")
+func WriteImportsFile(dir string, outputFlag string, data []byte, force bool) (string, error) {
+	path := outputFlag
+	if path == "" {
+		path = filepath.Join(dir, "imports.tf")
+	}
 	if !force {
 		if _, err := os.Stat(path); err == nil {
 			return "", fmt.Errorf("imports.tf already exists — remove it or use --force to overwrite")

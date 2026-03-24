@@ -58,7 +58,7 @@ func TestWriteImportsFile_NewFile(t *testing.T) {
 	tmpDir := t.TempDir()
 	data := []byte("import {\n  to = aws_s3_bucket.example\n  id = \"bucket\"\n}\n")
 
-	path, err := WriteImportsFile(tmpDir, data, false)
+	path, err := WriteImportsFile(tmpDir, "", data, false)
 	require.NoError(t, err)
 
 	assert.True(t, strings.HasSuffix(path, "imports.tf"))
@@ -79,7 +79,7 @@ func TestWriteImportsFile_ExistsNoForce(t *testing.T) {
 	require.NoError(t, err)
 
 	newData := []byte("new content")
-	_, err = WriteImportsFile(tmpDir, newData, false)
+	_, err = WriteImportsFile(tmpDir, "", newData, false)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "already exists")
 
@@ -98,7 +98,7 @@ func TestWriteImportsFile_ExistsWithForce(t *testing.T) {
 	require.NoError(t, err)
 
 	newData := []byte("new content")
-	path, err := WriteImportsFile(tmpDir, newData, true)
+	path, err := WriteImportsFile(tmpDir, "", newData, true)
 	require.NoError(t, err)
 
 	assert.Equal(t, importsPath, path)

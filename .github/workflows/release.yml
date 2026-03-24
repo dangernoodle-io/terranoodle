@@ -8,4 +8,6 @@ on:
 jobs:
   release:
     uses: dangernoodle-io/.github/.github/workflows/go-release.yml@main
+    with:
+      homebrew: true
     secrets: inherit

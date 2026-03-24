@@ -21,6 +21,20 @@ terranoodle
   version              # print version
 ```
 
+## Install
+
+### Homebrew
+
+```bash
+brew install dangernoodle-io/tap/terranoodle
+```
+
+### From Source
+
+```bash
+go install dangernoodle.io/terranoodle@latest
+```
+
 ## Build
 
 ```

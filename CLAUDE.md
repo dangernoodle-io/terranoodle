@@ -13,7 +13,12 @@ terranoodle
   catalog
     generate [flags]   # generate terragrunt stack from catalog template
     scaffold [flags]   # generate catalog from existing terragrunt dir (not yet implemented)
-  lint [flags]         # lint terragrunt stack configs
+  config
+    get <key>          # get effective config value
+    set <key> <value>  # set config value (--global for global config)
+    list               # show effective merged config
+    init               # scaffold .terranoodle.yml with defaults
+  lint [flags]         # lint terragrunt stack configs (--config for explicit config path)
   state
     import [flags]     # generate import blocks from terraform plan (--dry-run for preview)
     remove [flags]     # remove destroyed resources from state without destroying infrastructure
@@ -52,6 +57,7 @@ go build -ldflags "-X dangernoodle.io/terranoodle/internal/cli.Version=v0.1.0-al
 | Package | Purpose |
 |---------|---------|
 | `internal/cli/` | Cobra root + subcommand wiring |
+| `internal/config/` | Project/global config (`.terranoodle.yml`) |
 | `internal/output/` | Colored terminal output |
 | `internal/ui/` | Terminal UI components (spinner) |
 | `internal/hclutils/` | Shared HCL parsing utilities |

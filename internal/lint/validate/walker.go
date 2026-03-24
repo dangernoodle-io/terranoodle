@@ -11,9 +11,14 @@ import (
 // Dir validates terragrunt.hcl and/or terragrunt.stack.hcl in a single directory.
 // If no terragrunt config is found, it falls back to validating Terraform module
 // blocks in .tf files.
-func Dir(dir string) ([]Error, error) {
+func Dir(dir string, opts ...Options) ([]Error, error) {
 	var allErrors []Error
 	foundTerragrunt := false
+
+	var opt Options
+	if len(opts) > 0 {
+		opt = opts[0]
+	}
 
 	for _, name := range []string{"terragrunt.hcl", "terragrunt.stack.hcl"} {
 		path := filepath.Join(dir, name)
@@ -25,9 +30,9 @@ func Dir(dir string) ([]Error, error) {
 		var errs []Error
 		var toolErr error
 		if name == "terragrunt.stack.hcl" {
-			errs, toolErr = StackFile(path)
+			errs, toolErr = StackFile(path, opt)
 		} else {
-			errs, toolErr = File(path)
+			errs, toolErr = File(path, opt)
 		}
 		if toolErr != nil {
 			return nil, toolErr
@@ -36,7 +41,7 @@ func Dir(dir string) ([]Error, error) {
 	}
 
 	if !foundTerragrunt && hclutils.HasTFFiles(dir) {
-		errs, err := TerraformDir(dir)
+		errs, err := TerraformDir(dir, opt)
 		if err != nil {
 			return nil, err
 		}
@@ -49,11 +54,16 @@ func Dir(dir string) ([]Error, error) {
 // WalkDir recursively finds terragrunt.hcl files under dir and validates each.
 // Directories without terragrunt config but containing .tf files with module
 // blocks are validated as standalone Terraform directories.
-func WalkDir(dir string) ([]Error, error) {
+func WalkDir(dir string, opts ...Options) ([]Error, error) {
 	var allErrors []Error
 
 	// Track directories that have terragrunt config so we can skip TF fallback.
 	visitedDirs := map[string]bool{}
+
+	var opt Options
+	if len(opts) > 0 {
+		opt = opts[0]
+	}
 
 	err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
@@ -66,10 +76,13 @@ func WalkDir(dir string) ([]Error, error) {
 			if strings.HasPrefix(name, ".") || name == ".terragrunt-cache" {
 				return filepath.SkipDir
 			}
+			if isExcludedDir(name, opt) {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 
-		errs, toolErr := validateFile(path, d.Name(), visitedDirs)
+		errs, toolErr := validateFile(path, d.Name(), visitedDirs, opt)
 		if toolErr != nil {
 			return toolErr
 		}
@@ -83,15 +96,15 @@ func WalkDir(dir string) ([]Error, error) {
 // validateFile dispatches validation for a single file encountered during a
 // directory walk. It returns any errors found and updates visitedDirs to
 // prevent duplicate validation of the same directory.
-func validateFile(path, name string, visitedDirs map[string]bool) ([]Error, error) {
+func validateFile(path, name string, visitedDirs map[string]bool, opt Options) ([]Error, error) {
 	if name == "terragrunt.hcl" || name == "terragrunt.stack.hcl" {
 		dir := filepath.Dir(path)
 		visitedDirs[dir] = true
 
 		if name == "terragrunt.stack.hcl" {
-			return StackFile(path)
+			return StackFile(path, opt)
 		}
-		return File(path)
+		return File(path, opt)
 	}
 
 	// For .tf files in directories without terragrunt config, validate once per dir.
@@ -100,7 +113,7 @@ func validateFile(path, name string, visitedDirs map[string]bool) ([]Error, erro
 		if !visitedDirs[tfDir] {
 			// Mark the dir so we don't validate it again for subsequent .tf files.
 			visitedDirs[tfDir] = true
-			return TerraformDir(tfDir)
+			return TerraformDir(tfDir, opt)
 		}
 	}
 

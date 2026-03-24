@@ -6,14 +6,16 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"dangernoodle.io/terranoodle/internal/config"
 	"dangernoodle.io/terranoodle/internal/lint/report"
 	"dangernoodle.io/terranoodle/internal/lint/validate"
 	"dangernoodle.io/terranoodle/internal/output"
 )
 
 var (
-	lintDirFlag string
-	lintAllFlag bool
+	lintDirFlag    string
+	lintAllFlag    bool
+	lintConfigFlag string
 )
 
 var lintCmd = &cobra.Command{
@@ -25,6 +27,7 @@ var lintCmd = &cobra.Command{
 func init() {
 	lintCmd.Flags().StringVarP(&lintDirFlag, "dir", "d", "", "Directory to lint (default: current directory)")
 	lintCmd.Flags().BoolVar(&lintAllFlag, "all", false, "Lint all subdirectories")
+	lintCmd.Flags().StringVar(&lintConfigFlag, "config", "", "Path to config file (default: auto-discover)")
 }
 
 func runLint(cmd *cobra.Command, args []string) error {
@@ -37,13 +40,27 @@ func runLint(cmd *cobra.Command, args []string) error {
 		dir = cwd
 	}
 
+	var cfg *config.Config
+	var cfgErr error
+
+	if lintConfigFlag != "" {
+		cfg, cfgErr = config.Load(lintConfigFlag)
+	} else {
+		cfg, cfgErr = config.Discover(dir)
+	}
+	if cfgErr != nil {
+		return cfgErr
+	}
+
+	opts := validate.Options{Config: &cfg.Lint}
+
 	var errs []validate.Error
 	var err error
 
 	if lintAllFlag {
-		errs, err = validate.WalkDir(dir)
+		errs, err = validate.WalkDir(dir, opts)
 	} else {
-		errs, err = validate.Dir(dir)
+		errs, err = validate.Dir(dir, opts)
 	}
 	if err != nil {
 		return err

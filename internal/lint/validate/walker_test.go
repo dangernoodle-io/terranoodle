@@ -6,6 +6,7 @@ import (
 	"runtime"
 	"testing"
 
+	"dangernoodle.io/terranoodle/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -163,4 +164,62 @@ inputs = {
 	errs, err := WalkDir(tempDir)
 	require.NoError(t, err)
 	assert.Empty(t, errs, "both configs should be valid")
+}
+
+// TestWalkDir_ExcludeDirs tests WalkDir respects ExcludeDirs configuration.
+func TestWalkDir_ExcludeDirs(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create a shared module directory
+	moduleDir := filepath.Join(tempDir, "shared-module")
+	require.NoError(t, os.Mkdir(moduleDir, 0o755))
+	varsFile := filepath.Join(moduleDir, "variables.tf")
+	require.NoError(t, os.WriteFile(varsFile, []byte(`variable "region" {
+  type = string
+}
+`), 0o644))
+
+	// Create included-dir/terragrunt.hcl (valid)
+	includedDir := filepath.Join(tempDir, "included-dir")
+	require.NoError(t, os.Mkdir(includedDir, 0o755))
+	includedConfig := filepath.Join(includedDir, "terragrunt.hcl")
+	require.NoError(t, os.WriteFile(includedConfig, []byte(`terraform {
+  source = "../shared-module"
+}
+
+inputs = {
+  region = "us-east-1"
+}
+`), 0o644))
+
+	// Create excluded-dir/terragrunt.hcl (invalid - missing required region)
+	excludedDir := filepath.Join(tempDir, "excluded-dir")
+	require.NoError(t, os.Mkdir(excludedDir, 0o755))
+	excludedConfig := filepath.Join(excludedDir, "terragrunt.hcl")
+	require.NoError(t, os.WriteFile(excludedConfig, []byte(`terraform {
+  source = "../shared-module"
+}
+
+inputs = {}
+`), 0o644))
+
+	// Walk without exclude config - should find error in excluded-dir
+	errs, err := WalkDir(tempDir)
+	require.NoError(t, err)
+	require.Len(t, errs, 1, "should find error in excluded-dir without config")
+	assert.Equal(t, MissingRequired, errs[0].Kind)
+
+	// Walk with exclude config - should skip excluded-dir
+	cfg := &config.LintConfig{
+		ExcludeDirs: []string{"excluded-dir"},
+		Rules: map[string]config.RuleConfig{
+			"missing-required": {Enabled: true},
+			"extra-input":      {Enabled: true},
+			"type-mismatch":    {Enabled: true},
+		},
+	}
+	opts := Options{Config: cfg}
+	errs, err = WalkDir(tempDir, opts)
+	require.NoError(t, err)
+	assert.Empty(t, errs, "excluded-dir should be skipped and produce no errors")
 }

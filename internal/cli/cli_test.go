@@ -1690,3 +1690,293 @@ func TestRunStateRename_PlanFileNotFound(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "read plan")
 }
+
+// makeTerragruntFixture creates a temporary directory with a .terragrunt-cache structure.
+func makeTerragruntFixture(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	err := os.MkdirAll(filepath.Join(dir, ".terragrunt-cache", "abc", "def", ".terraform"), 0755)
+	require.NoError(t, err)
+	return dir
+}
+
+// State import error tests
+
+func TestRunStateImport_VersionError(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.hcl")
+	err := os.WriteFile(configPath, []byte("types:\n  aws_s3_bucket:\n    id: \"{{.bucket}}\""), 0644)
+	require.NoError(t, err)
+
+	oldConfig := importConfigFlag
+	oldDir := importDirFlag
+	oldCheckVersion := checkVersionFn
+	t.Cleanup(func() {
+		importConfigFlag = oldConfig
+		importDirFlag = oldDir
+		checkVersionFn = oldCheckVersion
+	})
+
+	importConfigFlag = configPath
+	importDirFlag = tmpDir
+	checkVersionFn = func(ctx context.Context) error {
+		return fmt.Errorf("version check failed")
+	}
+
+	err = runStateImport(stateImportCmd, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "version check failed")
+}
+
+func TestRunStateImport_TerragruntVersionError(t *testing.T) {
+	tmpDir := makeTerragruntFixture(t)
+	configPath := filepath.Join(tmpDir, "config.hcl")
+	err := os.WriteFile(configPath, []byte("types:\n  aws_s3_bucket:\n    id: \"{{.bucket}}\""), 0644)
+	require.NoError(t, err)
+
+	oldConfig := importConfigFlag
+	oldDir := importDirFlag
+	oldCheckVersion := checkVersionFn
+	oldCheckTgVersion := checkTerragruntVersionFn
+	t.Cleanup(func() {
+		importConfigFlag = oldConfig
+		importDirFlag = oldDir
+		checkVersionFn = oldCheckVersion
+		checkTerragruntVersionFn = oldCheckTgVersion
+	})
+
+	importConfigFlag = configPath
+	importDirFlag = tmpDir
+	checkVersionFn = func(ctx context.Context) error { return nil }
+	checkTerragruntVersionFn = func(ctx context.Context) error {
+		return fmt.Errorf("terragrunt version check failed")
+	}
+
+	err = runStateImport(stateImportCmd, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "terragrunt version check failed")
+}
+
+func TestRunStateImport_TerragruntFindCacheError(t *testing.T) {
+	tmpDir := t.TempDir()
+	err := os.MkdirAll(filepath.Join(tmpDir, ".terragrunt-cache"), 0755)
+	require.NoError(t, err)
+
+	configPath := filepath.Join(tmpDir, "config.hcl")
+	err = os.WriteFile(configPath, []byte("types:\n  aws_s3_bucket:\n    id: \"{{.bucket}}\""), 0644)
+	require.NoError(t, err)
+
+	oldConfig := importConfigFlag
+	oldDir := importDirFlag
+	oldCheckVersion := checkVersionFn
+	oldCheckTgVersion := checkTerragruntVersionFn
+	t.Cleanup(func() {
+		importConfigFlag = oldConfig
+		importDirFlag = oldDir
+		checkVersionFn = oldCheckVersion
+		checkTerragruntVersionFn = oldCheckTgVersion
+	})
+
+	importConfigFlag = configPath
+	importDirFlag = tmpDir
+	checkVersionFn = func(ctx context.Context) error { return nil }
+	checkTerragruntVersionFn = func(ctx context.Context) error { return nil }
+
+	err = runStateImport(stateImportCmd, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "initialised")
+}
+
+// State scaffold error tests
+
+func TestRunStateScaffold_VersionError(t *testing.T) {
+	oldCheckVersion := checkVersionFn
+	t.Cleanup(func() {
+		checkVersionFn = oldCheckVersion
+	})
+
+	checkVersionFn = func(ctx context.Context) error {
+		return fmt.Errorf("version check failed")
+	}
+
+	err := runStateScaffold(stateScaffoldCmd, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "version check failed")
+}
+
+func TestRunStateScaffold_TerragruntVersionError(t *testing.T) {
+	tmpDir := makeTerragruntFixture(t)
+
+	oldDir := scaffoldDirFlag
+	oldCheckVersion := checkVersionFn
+	oldCheckTgVersion := checkTerragruntVersionFn
+	t.Cleanup(func() {
+		scaffoldDirFlag = oldDir
+		checkVersionFn = oldCheckVersion
+		checkTerragruntVersionFn = oldCheckTgVersion
+	})
+
+	scaffoldDirFlag = tmpDir
+	checkVersionFn = func(ctx context.Context) error { return nil }
+	checkTerragruntVersionFn = func(ctx context.Context) error {
+		return fmt.Errorf("terragrunt version check failed")
+	}
+
+	err := runStateScaffold(stateScaffoldCmd, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "terragrunt version check failed")
+}
+
+func TestRunStateScaffold_FindCacheError(t *testing.T) {
+	tmpDir := t.TempDir()
+	err := os.MkdirAll(filepath.Join(tmpDir, ".terragrunt-cache"), 0755)
+	require.NoError(t, err)
+
+	oldDir := scaffoldDirFlag
+	oldCheckVersion := checkVersionFn
+	oldCheckTgVersion := checkTerragruntVersionFn
+	t.Cleanup(func() {
+		scaffoldDirFlag = oldDir
+		checkVersionFn = oldCheckVersion
+		checkTerragruntVersionFn = oldCheckTgVersion
+	})
+
+	scaffoldDirFlag = tmpDir
+	checkVersionFn = func(ctx context.Context) error { return nil }
+	checkTerragruntVersionFn = func(ctx context.Context) error { return nil }
+
+	err = runStateScaffold(stateScaffoldCmd, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "initialised")
+}
+
+// State rename error tests
+
+func TestRunStateRename_VersionError(t *testing.T) {
+	tmpDir := t.TempDir()
+	err := os.MkdirAll(filepath.Join(tmpDir, ".terraform"), 0755)
+	require.NoError(t, err)
+
+	saveRenameFlags(t)
+	saveRenameSeams(t)
+
+	renameMovedFlag = true
+	renameDirFlag = tmpDir
+
+	checkVersionFn = func(ctx context.Context) error {
+		return fmt.Errorf("version check failed")
+	}
+
+	err = runStateRename(stateRenameCmd, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "version check failed")
+}
+
+func TestRunStateRename_CheckInitError(t *testing.T) {
+	tmpDir := t.TempDir()
+	err := os.MkdirAll(filepath.Join(tmpDir, ".terraform"), 0755)
+	require.NoError(t, err)
+
+	saveRenameFlags(t)
+	saveRenameSeams(t)
+
+	renameMovedFlag = true
+	renameDirFlag = tmpDir
+
+	checkInitFn = func(workDir string) error {
+		return fmt.Errorf("init check failed")
+	}
+
+	err = runStateRename(stateRenameCmd, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "init check failed")
+}
+
+func TestRunStateRename_GeneratePlanError(t *testing.T) {
+	tmpDir := t.TempDir()
+	err := os.MkdirAll(filepath.Join(tmpDir, ".terraform"), 0755)
+	require.NoError(t, err)
+
+	saveRenameFlags(t)
+	saveRenameSeams(t)
+
+	renameMovedFlag = true
+	renameDirFlag = tmpDir
+
+	generatePlanJSONFn = func(ctx context.Context, workDir string, useTerragrunt bool) ([]byte, error) {
+		return nil, fmt.Errorf("plan generation failed")
+	}
+
+	err = runStateRename(stateRenameCmd, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "plan generation failed")
+}
+
+func TestRunStateRename_ParsePlanError(t *testing.T) {
+	tmpDir := t.TempDir()
+	err := os.MkdirAll(filepath.Join(tmpDir, ".terraform"), 0755)
+	require.NoError(t, err)
+
+	saveRenameFlags(t)
+	saveRenameSeams(t)
+
+	renameMovedFlag = true
+	renameDirFlag = tmpDir
+
+	generatePlanJSONFn = func(ctx context.Context, workDir string, useTerragrunt bool) ([]byte, error) {
+		return []byte("invalid json"), nil
+	}
+
+	err = runStateRename(stateRenameCmd, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "parse")
+}
+
+func TestRunStateRename_ConfirmCandidatesError(t *testing.T) {
+	tmpDir := t.TempDir()
+	err := os.MkdirAll(filepath.Join(tmpDir, ".terraform"), 0755)
+	require.NoError(t, err)
+
+	saveRenameFlags(t)
+	saveRenameSeams(t)
+
+	renameMovedFlag = true
+	renameDirFlag = tmpDir
+
+	generatePlanJSONFn = func(ctx context.Context, workDir string, useTerragrunt bool) ([]byte, error) {
+		return []byte(renamePlanWithDestroyCreate), nil
+	}
+
+	confirmCandidatesFn = func(candidates []rename.Candidate) ([]rename.RenamePair, error) {
+		return nil, fmt.Errorf("confirm failed")
+	}
+
+	err = runStateRename(stateRenameCmd, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "confirm failed")
+}
+
+func TestRunStateRename_MvApply_StateMvError(t *testing.T) {
+	tmpDir := t.TempDir()
+	err := os.MkdirAll(filepath.Join(tmpDir, ".terraform"), 0755)
+	require.NoError(t, err)
+
+	saveRenameFlags(t)
+	saveRenameSeams(t)
+
+	renameMvFlag = true
+	renameApplyFlag = true
+	renameDirFlag = tmpDir
+
+	generatePlanJSONFn = func(ctx context.Context, workDir string, useTerragrunt bool) ([]byte, error) {
+		return []byte(renamePlanWithPreviousAddress), nil
+	}
+
+	stateMvFn = func(ctx context.Context, workDir, from, to string, useTerragrunt bool) error {
+		return fmt.Errorf("state mv failed")
+	}
+
+	err = runStateRename(stateRenameCmd, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "state mv failed")
+}

@@ -95,3 +95,75 @@ func TestCheckTerragrunt_BinaryNotFound(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not found")
 }
+
+// TestCheckTerraform_RunCommandError tests that runCommand error is properly wrapped.
+func TestCheckTerraform_RunCommandError(t *testing.T) {
+	origLookPath := lookPath
+	origRunCommand := runCommand
+	t.Cleanup(func() {
+		lookPath = origLookPath
+		runCommand = origRunCommand
+	})
+	lookPath = func(file string) (string, error) { return "/usr/bin/" + file, nil }
+	runCommand = func(ctx context.Context, name string, args ...string) ([]byte, error) {
+		return nil, fmt.Errorf("command failed")
+	}
+
+	err := CheckTerraform(context.Background())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to get terraform version")
+}
+
+// TestCheckTerraform_InvalidJSON tests that invalid JSON output is properly rejected.
+func TestCheckTerraform_InvalidJSON(t *testing.T) {
+	stubSeams(t, []byte("not json"))
+
+	err := CheckTerraform(context.Background())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to parse terraform version output")
+}
+
+// TestCheckTerraform_UnparsableVersion tests that unparsable version strings are properly rejected.
+func TestCheckTerraform_UnparsableVersion(t *testing.T) {
+	stubSeams(t, []byte(`{"terraform_version":"not-a-version"}`))
+
+	err := CheckTerraform(context.Background())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to parse terraform version")
+}
+
+// TestCheckTerragrunt_RunCommandError tests that runCommand error is properly wrapped.
+func TestCheckTerragrunt_RunCommandError(t *testing.T) {
+	origLookPath := lookPath
+	origRunCommand := runCommand
+	t.Cleanup(func() {
+		lookPath = origLookPath
+		runCommand = origRunCommand
+	})
+	lookPath = func(file string) (string, error) { return "/usr/bin/" + file, nil }
+	runCommand = func(ctx context.Context, name string, args ...string) ([]byte, error) {
+		return nil, fmt.Errorf("command failed")
+	}
+
+	err := CheckTerragrunt(context.Background())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to get terragrunt version")
+}
+
+// TestCheckTerragrunt_UnexpectedFormat tests that unexpected output format is properly rejected.
+func TestCheckTerragrunt_UnexpectedFormat(t *testing.T) {
+	stubSeams(t, []byte("unexpected output"))
+
+	err := CheckTerragrunt(context.Background())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unexpected terragrunt version output format")
+}
+
+// TestCheckTerragrunt_UnparsableVersion tests that unparsable version strings are properly rejected.
+func TestCheckTerragrunt_UnparsableVersion(t *testing.T) {
+	stubSeams(t, []byte("terragrunt version vNOTVALID"))
+
+	err := CheckTerragrunt(context.Background())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to parse terragrunt version")
+}

@@ -16,6 +16,7 @@ var (
 	lintDirFlag    string
 	lintAllFlag    bool
 	lintConfigFlag string
+	lintStrictFlag bool
 )
 
 var lintCmd = &cobra.Command{
@@ -28,6 +29,7 @@ func init() {
 	lintCmd.Flags().StringVarP(&lintDirFlag, "dir", "d", "", "Directory to lint (default: current directory)")
 	lintCmd.Flags().BoolVar(&lintAllFlag, "all", false, "Lint all subdirectories")
 	lintCmd.Flags().StringVar(&lintConfigFlag, "config", "", "Path to config file (default: auto-discover)")
+	lintCmd.Flags().BoolVar(&lintStrictFlag, "strict", false, "Treat warnings as errors")
 }
 
 func runLint(cmd *cobra.Command, args []string) error {
@@ -52,7 +54,8 @@ func runLint(cmd *cobra.Command, args []string) error {
 		return cfgErr
 	}
 
-	opts := validate.Options{Config: &cfg.Lint}
+	strict := lintStrictFlag || os.Getenv("CI") != ""
+	opts := validate.Options{Config: &cfg.Lint, Strict: strict}
 
 	var errs []validate.Error
 	var err error
@@ -66,9 +69,27 @@ func runLint(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	var errorCount, warningCount int
+	for _, e := range errs {
+		if e.Severity == validate.SeverityError {
+			errorCount++
+		} else {
+			warningCount++
+		}
+	}
+
 	if len(errs) > 0 {
 		report.Print(os.Stdout, errs)
-		return fmt.Errorf("lint: found %d issue(s)", len(errs))
+		if errorCount > 0 {
+			if warningCount > 0 && strict {
+				return fmt.Errorf("lint: found %d error(s), %d warning(s)", errorCount, warningCount)
+			}
+			return fmt.Errorf("lint: found %d error(s)", errorCount)
+		}
+		if warningCount > 0 && strict {
+			return fmt.Errorf("lint: found %d warning(s)", warningCount)
+		}
+		return nil
 	}
 
 	output.Success("No issues found")

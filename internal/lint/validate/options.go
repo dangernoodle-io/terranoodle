@@ -5,6 +5,7 @@ import "dangernoodle.io/terranoodle/internal/config"
 // Options configures lint validation behavior.
 type Options struct {
 	Config *config.LintConfig
+	Strict bool
 }
 
 // ruleNames maps ErrorKind to config rule names.

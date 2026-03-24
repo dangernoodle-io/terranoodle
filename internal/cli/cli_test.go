@@ -315,7 +315,7 @@ variable "labels" {
 
 	err = runLint(lintCmd, nil)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "issue")
+	assert.Contains(t, err.Error(), "error")
 }
 
 func TestRunLint_EmptyDir(t *testing.T) {

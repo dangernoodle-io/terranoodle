@@ -15,11 +15,11 @@ var (
 	yellowColor = color.New(color.FgYellow)
 )
 
-func kindColor(kind validate.ErrorKind) *color.Color {
-	switch kind {
-	case validate.MissingRequired, validate.TypeMismatch:
+func severityColor(severity validate.Severity) *color.Color {
+	switch severity {
+	case validate.SeverityError:
 		return redColor
-	case validate.ExtraInput:
+	case validate.SeverityWarning:
 		return yellowColor
 	default:
 		return redColor
@@ -48,10 +48,31 @@ func Print(w io.Writer, errs []validate.Error) {
 		}
 		fmt.Fprintf(w, "%s\n", boldColor.Sprint(file))
 		for _, e := range grouped[file] {
-			fmt.Fprintf(w, "  %s: %s\n", kindColor(e.Kind).Sprint(e.Kind), e.Detail)
+			fmt.Fprintf(w, "  %s: %s\n", severityColor(e.Severity).Sprint(e.Kind), e.Detail)
 		}
 	}
 
-	summary := fmt.Sprintf("\n%d error(s) in %d file(s)", len(errs), len(order))
-	fmt.Fprintln(w, redColor.Sprint(summary))
+	var errorCount, warningCount int
+	for _, e := range errs {
+		if e.Severity == validate.SeverityError {
+			errorCount++
+		} else {
+			warningCount++
+		}
+	}
+
+	var summary string
+	if errorCount > 0 && warningCount > 0 {
+		summary = fmt.Sprintf("\n%d error(s), %d warning(s) in %d file(s)", errorCount, warningCount, len(order))
+	} else if warningCount > 0 {
+		summary = fmt.Sprintf("\n%d warning(s) in %d file(s)", warningCount, len(order))
+	} else {
+		summary = fmt.Sprintf("\n%d error(s) in %d file(s)", errorCount, len(order))
+	}
+
+	summaryColor := redColor
+	if errorCount == 0 && warningCount > 0 {
+		summaryColor = yellowColor
+	}
+	fmt.Fprintln(w, summaryColor.Sprint(summary))
 }

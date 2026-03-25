@@ -49,6 +49,7 @@ const (
 	ProviderConstraintStyle
 	EmptyOutputsTF
 	VersionsTFNotSymlink
+	MissingValidation
 )
 
 func (k ErrorKind) String() string {
@@ -95,6 +96,8 @@ func (k ErrorKind) String() string {
 		return "empty outputs.tf"
 	case VersionsTFNotSymlink:
 		return "versions.tf not symlinked to root"
+	case MissingValidation:
+		return "missing validation block"
 	default:
 		return "unknown"
 	}
@@ -846,6 +849,35 @@ func ModuleDir(dir string, opts ...Options) ([]Error, error) {
 					}
 				}
 			}
+		}
+	}
+
+	// Rule: missing-validation
+	if opt.Config != nil && opt.Config.IsRuleEnabled("missing-validation", absDir) {
+		excludes := getExcludePatterns(opt, "missing-validation")
+		for _, v := range variables {
+			if v.HasValidation {
+				continue
+			}
+
+			// Check if variable name matches any exclude pattern
+			excluded := false
+			for _, p := range excludes {
+				if matched, _ := filepath.Match(p, v.Name); matched {
+					excluded = true
+					break
+				}
+			}
+			if excluded {
+				continue
+			}
+
+			errs = append(errs, Error{
+				File:     absDir,
+				Variable: v.Name,
+				Kind:     MissingValidation,
+				Detail:   fmt.Sprintf("variable %q has no validation block", v.Name),
+			})
 		}
 	}
 

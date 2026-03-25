@@ -14,6 +14,7 @@ type Variable struct {
 	Name           string
 	HasDefault     bool
 	HasDescription bool
+	HasValidation  bool
 	Type           hcl.Expression // raw type expression, nil if unspecified (Phase 5)
 }
 
@@ -67,6 +68,12 @@ var variableBodySchema = &hcl.BodySchema{
 	},
 }
 
+var variableValidationSchema = &hcl.BodySchema{
+	Blocks: []hcl.BlockHeaderSchema{
+		{Type: "validation"},
+	},
+}
+
 func extractVariables(body hcl.Body) ([]Variable, error) {
 	content, _, diags := body.PartialContent(variableBlockSchema)
 	if diags.HasErrors() {
@@ -79,7 +86,7 @@ func extractVariables(body hcl.Body) ([]Variable, error) {
 			continue
 		}
 
-		varContent, _, diags := block.Body.PartialContent(variableBodySchema)
+		varContent, remain, diags := block.Body.PartialContent(variableBodySchema)
 		if diags.HasErrors() {
 			return nil, fmt.Errorf("decoding variable %s: %s", block.Labels[0], diags.Error())
 		}
@@ -96,6 +103,12 @@ func extractVariables(body hcl.Body) ([]Variable, error) {
 		}
 		if attr, ok := varContent.Attributes["type"]; ok {
 			v.Type = attr.Expr
+		}
+
+		// Check for validation blocks in remaining body
+		valContent, _, _ := remain.PartialContent(variableValidationSchema)
+		if len(valContent.Blocks) > 0 {
+			v.HasValidation = true
 		}
 
 		vars = append(vars, v)

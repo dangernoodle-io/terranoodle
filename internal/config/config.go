@@ -253,6 +253,7 @@ func Default() *Config {
 				"no-tg-provider-blocks":     {Enabled: false},
 				"set-string-type":           {Enabled: false},
 				"provider-constraint-style": {Enabled: false},
+				"empty-outputs-tf":          {Enabled: false},
 			},
 		},
 	}

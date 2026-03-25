@@ -445,3 +445,38 @@ func TestModuleDir_ProviderConstraintStyle_DisabledByDefault(t *testing.T) {
 		assert.NotEqual(t, ProviderConstraintStyle, e.Kind)
 	}
 }
+
+func TestModuleDir_EmptyOutputsTF_DisabledByDefault(t *testing.T) {
+	cfg := config.Default()
+	errs, err := ModuleDir(moduleDirTestdata("empty-outputs-tf"), Options{Config: &cfg.Lint})
+	require.NoError(t, err)
+	for _, e := range errs {
+		assert.NotEqual(t, EmptyOutputsTF, e.Kind)
+	}
+}
+
+func TestModuleDir_EmptyOutputsTF_Enabled(t *testing.T) {
+	cfg := &config.LintConfig{Rules: map[string]config.RuleConfig{
+		"empty-outputs-tf": {Enabled: true},
+	}}
+	errs, err := ModuleDir(moduleDirTestdata("empty-outputs-tf"), Options{Config: cfg})
+	require.NoError(t, err)
+	var emptyErrs []Error
+	for _, e := range errs {
+		if e.Kind == EmptyOutputsTF {
+			emptyErrs = append(emptyErrs, e)
+		}
+	}
+	require.Len(t, emptyErrs, 1)
+}
+
+func TestModuleDir_EmptyOutputsTF_WithOutputs(t *testing.T) {
+	cfg := &config.LintConfig{Rules: map[string]config.RuleConfig{
+		"empty-outputs-tf": {Enabled: true},
+	}}
+	errs, err := ModuleDir(moduleDirTestdata("simple-valid"), Options{Config: cfg})
+	require.NoError(t, err)
+	for _, e := range errs {
+		assert.NotEqual(t, EmptyOutputsTF, e.Kind)
+	}
+}

@@ -29,6 +29,7 @@ var ruleNames = map[ErrorKind]string{
 	NoProviderBlock:         "no-tg-provider-blocks",
 	SetStringType:           "set-string-type",
 	ProviderConstraintStyle: "provider-constraint-style",
+	EmptyOutputsTF:          "empty-outputs-tf",
 }
 
 // filterErrors removes errors for disabled rules.

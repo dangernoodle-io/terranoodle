@@ -47,6 +47,7 @@ const (
 	NoProviderBlock
 	SetStringType
 	ProviderConstraintStyle
+	EmptyOutputsTF
 )
 
 func (k ErrorKind) String() string {
@@ -89,6 +90,8 @@ func (k ErrorKind) String() string {
 		return "set(string) type usage"
 	case ProviderConstraintStyle:
 		return "provider constraint style"
+	case EmptyOutputsTF:
+		return "empty outputs.tf"
 	default:
 		return "unknown"
 	}
@@ -759,6 +762,31 @@ func ModuleDir(dir string, opts ...Options) ([]Error, error) {
 					})
 				}
 			}
+		}
+	}
+
+	// Rule: empty-outputs-tf
+	if opt.Config != nil && opt.Config.IsRuleEnabled("empty-outputs-tf", absDir) {
+		tfFiles, fileErr := tfmod.ListTFFiles(absDir)
+		if fileErr != nil {
+			return nil, fileErr
+		}
+
+		// Check if outputs.tf exists but has no output blocks
+		hasOutputsTF := false
+		for _, f := range tfFiles {
+			if f == "outputs.tf" {
+				hasOutputsTF = true
+				break
+			}
+		}
+
+		if hasOutputsTF && len(outputs) == 0 {
+			errs = append(errs, Error{
+				File:   absDir,
+				Kind:   EmptyOutputsTF,
+				Detail: "outputs.tf exists but contains no output blocks",
+			})
 		}
 	}
 

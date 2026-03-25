@@ -103,6 +103,26 @@ func checkSourceRef(source, file string, opts Options) []Error {
 	}}
 }
 
+// applyAllowList downgrades ExtraInput errors to warnings if the variable matches an allow pattern.
+func applyAllowList(errs []Error, opts Options) []Error {
+	patterns := getAllowPatterns(opts, "extra-input")
+	if len(patterns) == 0 {
+		return errs
+	}
+	for i := range errs {
+		if errs[i].Kind != ExtraInput {
+			continue
+		}
+		for _, p := range patterns {
+			if matched, _ := filepath.Match(p, errs[i].Variable); matched {
+				errs[i].Severity = SeverityWarning
+				break
+			}
+		}
+	}
+	return errs
+}
+
 // File validates a single terragrunt.hcl file.
 func File(path string, opts ...Options) ([]Error, error) {
 	absPath, err := filepath.Abs(path)
@@ -155,7 +175,7 @@ func File(path string, opts ...Options) ([]Error, error) {
 
 	errs := check(absPath, cfg.Inputs, variables, depOutputKeys, envVarKeys, cfg.IncludeInputKeys, tfVarKeys, cfg.EvalCtx)
 	results = append(results, errs...)
-	return filterErrors(results, opt), nil
+	return filterErrors(applyAllowList(results, opt), opt), nil
 }
 
 // StackFile validates a terragrunt.stack.hcl file by checking each unit.
@@ -213,7 +233,7 @@ func StackFile(path string, opts ...Options) ([]Error, error) {
 		allErrors = append(allErrors, unitErrors...)
 	}
 
-	return filterErrors(allErrors, opt), nil
+	return filterErrors(applyAllowList(allErrors, opt), opt), nil
 }
 
 // resolveDepExemptions builds the set of input keys that are exempt from the
@@ -308,7 +328,7 @@ func TerraformDir(dir string, opts ...Options) ([]Error, error) {
 		opt = opts[0]
 	}
 
-	return filterErrors(allErrors, opt), nil
+	return filterErrors(applyAllowList(allErrors, opt), opt), nil
 }
 
 func check(file string, inputs map[string]hcl.Expression, variables []tfmod.Variable, depOutputKeys map[string]bool, envVarKeys map[string]bool, includeInputKeys map[string]bool, tfVarKeys map[string]bool, evalCtx *hcl.EvalContext) []Error {

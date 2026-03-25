@@ -484,3 +484,99 @@ func TestFile_SourceRefSemver(t *testing.T) {
 	assert.Equal(t, SeverityError, errs[0].Severity)
 	assert.Contains(t, errs[0].Detail, "main")
 }
+
+func TestApplyAllowList(t *testing.T) {
+	errs := []Error{
+		{Variable: "environment", Kind: ExtraInput, Severity: SeverityError},
+		{Variable: "bogus_field", Kind: ExtraInput, Severity: SeverityError},
+		{Variable: "region", Kind: MissingRequired, Severity: SeverityError},
+	}
+
+	cfg := &config.LintConfig{
+		Rules: map[string]config.RuleConfig{
+			"extra-input": {Enabled: true, Options: map[string]interface{}{
+				"allow": []interface{}{"environment"},
+			}},
+		},
+	}
+	opts := Options{Config: cfg}
+	result := applyAllowList(errs, opts)
+
+	require.Len(t, result, 3)
+	assert.Equal(t, SeverityWarning, result[0].Severity, "environment should be downgraded to warning")
+	assert.Equal(t, SeverityError, result[1].Severity, "bogus_field should remain error")
+	assert.Equal(t, SeverityError, result[2].Severity, "MissingRequired should not be affected")
+}
+
+func TestApplyAllowList_NoPatterns(t *testing.T) {
+	errs := []Error{
+		{Variable: "environment", Kind: ExtraInput, Severity: SeverityError},
+	}
+	result := applyAllowList(errs, Options{})
+	require.Len(t, result, 1)
+	assert.Equal(t, SeverityError, result[0].Severity, "should not change when no config")
+}
+
+func TestFile_ExtraInputAllow(t *testing.T) {
+	cfg := &config.LintConfig{
+		Rules: map[string]config.RuleConfig{
+			"extra-input": {Enabled: true, Options: map[string]interface{}{
+				"allow": []interface{}{"environment"},
+			}},
+		},
+	}
+	opts := Options{Config: cfg}
+	errs, err := File(testdataPath("extra-input"), opts)
+	require.NoError(t, err)
+	require.Len(t, errs, 2)
+
+	for _, e := range errs {
+		assert.Equal(t, ExtraInput, e.Kind)
+		if e.Variable == "environment" {
+			assert.Equal(t, SeverityWarning, e.Severity, "allowed variable should be warning")
+		} else {
+			assert.Equal(t, SeverityError, e.Severity, "non-allowed variable should be error")
+			assert.Equal(t, "bogus_field", e.Variable)
+		}
+	}
+}
+
+func TestFile_ExtraInputAllowGlob(t *testing.T) {
+	cfg := &config.LintConfig{
+		Rules: map[string]config.RuleConfig{
+			"extra-input": {Enabled: true, Options: map[string]interface{}{
+				"allow": []interface{}{"bogus_*"},
+			}},
+		},
+	}
+	opts := Options{Config: cfg}
+	errs, err := File(testdataPath("extra-input"), opts)
+	require.NoError(t, err)
+	require.Len(t, errs, 2)
+
+	for _, e := range errs {
+		if e.Variable == "bogus_field" {
+			assert.Equal(t, SeverityWarning, e.Severity, "glob-matched variable should be warning")
+		} else {
+			assert.Equal(t, SeverityError, e.Severity, "non-matched variable should be error")
+		}
+	}
+}
+
+func TestFile_ExtraInputAllowNoMatch(t *testing.T) {
+	cfg := &config.LintConfig{
+		Rules: map[string]config.RuleConfig{
+			"extra-input": {Enabled: true, Options: map[string]interface{}{
+				"allow": []interface{}{"other"},
+			}},
+		},
+	}
+	opts := Options{Config: cfg}
+	errs, err := File(testdataPath("extra-input"), opts)
+	require.NoError(t, err)
+	require.Len(t, errs, 2)
+
+	for _, e := range errs {
+		assert.Equal(t, SeverityError, e.Severity, "non-matching allow should keep error severity")
+	}
+}

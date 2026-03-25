@@ -7,6 +7,7 @@ import (
 
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
+	"github.com/zclconf/go-cty/cty"
 )
 
 // Variable represents a declared terraform variable.
@@ -15,6 +16,7 @@ type Variable struct {
 	HasDefault     bool
 	HasDescription bool
 	HasValidation  bool
+	IsSensitive    bool
 	Type           hcl.Expression // raw type expression, nil if unspecified (Phase 5)
 }
 
@@ -65,6 +67,7 @@ var variableBodySchema = &hcl.BodySchema{
 		{Name: "default"},
 		{Name: "type"},
 		{Name: "description"},
+		{Name: "sensitive"},
 	},
 }
 
@@ -103,6 +106,12 @@ func extractVariables(body hcl.Body) ([]Variable, error) {
 		}
 		if attr, ok := varContent.Attributes["type"]; ok {
 			v.Type = attr.Expr
+		}
+		if attr, ok := varContent.Attributes["sensitive"]; ok {
+			val, _ := attr.Expr.Value(nil)
+			if val == cty.True {
+				v.IsSensitive = true
+			}
 		}
 
 		// Check for validation blocks in remaining body

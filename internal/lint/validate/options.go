@@ -32,6 +32,7 @@ var ruleNames = map[ErrorKind]string{
 	EmptyOutputsTF:          "empty-outputs-tf",
 	VersionsTFNotSymlink:    "versions-tf-symlink",
 	MissingValidation:       "missing-validation",
+	SensitiveOutput:         "sensitive-output",
 }
 
 // filterErrors removes errors for disabled rules.

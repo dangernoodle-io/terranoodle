@@ -693,7 +693,7 @@ func TestDefault(t *testing.T) {
 	cfg := Default()
 
 	assert.NotNil(t, cfg)
-	assert.Equal(t, 18, len(cfg.Lint.Rules))
+	assert.Equal(t, 19, len(cfg.Lint.Rules))
 	assert.Equal(t, true, cfg.Lint.Rules["missing-required"].Enabled)
 	assert.Equal(t, true, cfg.Lint.Rules["extra-inputs"].Enabled)
 	assert.Equal(t, true, cfg.Lint.Rules["type-mismatch"].Enabled)
@@ -712,6 +712,7 @@ func TestDefault(t *testing.T) {
 	assert.Equal(t, false, cfg.Lint.Rules["empty-outputs-tf"].Enabled)
 	assert.Equal(t, false, cfg.Lint.Rules["versions-tf-symlink"].Enabled)
 	assert.Equal(t, false, cfg.Lint.Rules["missing-validation"].Enabled)
+	assert.Equal(t, false, cfg.Lint.Rules["sensitive-output"].Enabled)
 }
 
 // Test LintConfig RuleSeverity method.

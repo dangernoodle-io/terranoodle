@@ -563,3 +563,42 @@ func TestModuleDir_MissingValidation_WithExclude(t *testing.T) {
 		assert.NotEqual(t, MissingValidation, e.Kind)
 	}
 }
+
+func TestModuleDir_SensitiveOutput_DisabledByDefault(t *testing.T) {
+	cfg := config.Default()
+	errs, err := ModuleDir(moduleDirTestdata("sensitive-output"), Options{Config: &cfg.Lint})
+	require.NoError(t, err)
+	for _, e := range errs {
+		assert.NotEqual(t, SensitiveOutput, e.Kind)
+	}
+}
+
+func TestModuleDir_SensitiveOutput_Enabled(t *testing.T) {
+	cfg := &config.LintConfig{Rules: map[string]config.RuleConfig{
+		"sensitive-output": {Enabled: true},
+	}}
+	errs, err := ModuleDir(moduleDirTestdata("sensitive-output"), Options{Config: cfg})
+	require.NoError(t, err)
+	var sensitiveErrs []Error
+	for _, e := range errs {
+		if e.Kind == SensitiveOutput {
+			sensitiveErrs = append(sensitiveErrs, e)
+		}
+	}
+	require.Len(t, sensitiveErrs, 1)
+	assert.Equal(t, "api_key_value", sensitiveErrs[0].Variable)
+}
+
+func TestModuleDir_SensitiveOutput_AllSensitive(t *testing.T) {
+	_, file, _, _ := runtime.Caller(0)
+	dir := filepath.Join(filepath.Dir(file), "..", "testdata", "simple-valid", "module")
+
+	cfg := &config.LintConfig{Rules: map[string]config.RuleConfig{
+		"sensitive-output": {Enabled: true},
+	}}
+	errs, err := ModuleDir(dir, Options{Config: cfg})
+	require.NoError(t, err)
+	for _, e := range errs {
+		assert.NotEqual(t, SensitiveOutput, e.Kind)
+	}
+}

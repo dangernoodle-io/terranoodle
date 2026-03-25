@@ -7,12 +7,15 @@ import (
 
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
+	"github.com/zclconf/go-cty/cty"
 )
 
 // Output represents a declared terraform output.
 type Output struct {
 	Name           string
 	HasDescription bool
+	IsSensitive    bool
+	VarRefs        []string // variable names referenced via var.X
 }
 
 // ParseOutputs reads all .tf files in a module directory and returns outputs.
@@ -82,6 +85,24 @@ func extractOutputs(body hcl.Body) ([]Output, error) {
 		o := Output{Name: block.Labels[0]}
 		if _, ok := bodyContent.Attributes["description"]; ok {
 			o.HasDescription = true
+		}
+		if attr, ok := bodyContent.Attributes["sensitive"]; ok {
+			val, _ := attr.Expr.Value(nil)
+			if val == cty.True {
+				o.IsSensitive = true
+			}
+		}
+		if attr, ok := bodyContent.Attributes["value"]; ok {
+			traversals := attr.Expr.Variables()
+			for _, traversal := range traversals {
+				if len(traversal) >= 2 {
+					if root, ok := traversal[0].(hcl.TraverseRoot); ok && root.Name == "var" {
+						if attrStep, ok := traversal[1].(hcl.TraverseAttr); ok {
+							o.VarRefs = append(o.VarRefs, attrStep.Name)
+						}
+					}
+				}
+			}
 		}
 		outputs = append(outputs, o)
 	}

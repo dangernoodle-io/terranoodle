@@ -256,6 +256,7 @@ func Default() *Config {
 				"empty-outputs-tf":          {Enabled: false},
 				"versions-tf-symlink":       {Enabled: false},
 				"missing-validation":        {Enabled: false},
+				"sensitive-output":          {Enabled: false},
 			},
 		},
 	}

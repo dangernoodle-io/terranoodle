@@ -50,6 +50,7 @@ const (
 	EmptyOutputsTF
 	VersionsTFNotSymlink
 	MissingValidation
+	SensitiveOutput
 )
 
 func (k ErrorKind) String() string {
@@ -98,6 +99,8 @@ func (k ErrorKind) String() string {
 		return "versions.tf not symlinked to root"
 	case MissingValidation:
 		return "missing validation block"
+	case SensitiveOutput:
+		return "sensitive output without sensitive flag"
 	default:
 		return "unknown"
 	}
@@ -878,6 +881,34 @@ func ModuleDir(dir string, opts ...Options) ([]Error, error) {
 				Kind:     MissingValidation,
 				Detail:   fmt.Sprintf("variable %q has no validation block", v.Name),
 			})
+		}
+	}
+
+	// Rule: sensitive-output
+	if opt.Config != nil && opt.Config.IsRuleEnabled("sensitive-output", absDir) {
+		sensitiveVars := make(map[string]bool)
+		for _, v := range variables {
+			if v.IsSensitive {
+				sensitiveVars[v.Name] = true
+			}
+		}
+
+		for _, o := range outputs {
+			if o.IsSensitive {
+				continue
+			}
+
+			for _, refName := range o.VarRefs {
+				if sensitiveVars[refName] {
+					errs = append(errs, Error{
+						File:     absDir,
+						Variable: o.Name,
+						Kind:     SensitiveOutput,
+						Detail:   fmt.Sprintf("output %q references sensitive variable %q but is not marked sensitive", o.Name, refName),
+					})
+					break
+				}
+			}
 		}
 	}
 

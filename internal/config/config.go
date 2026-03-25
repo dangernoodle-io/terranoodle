@@ -257,6 +257,7 @@ func Default() *Config {
 				"versions-tf-symlink":       {Enabled: false},
 				"missing-validation":        {Enabled: false},
 				"sensitive-output":          {Enabled: false},
+				"dependency-merge-order":    {Enabled: false},
 			},
 		},
 	}

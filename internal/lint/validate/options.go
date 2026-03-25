@@ -33,6 +33,7 @@ var ruleNames = map[ErrorKind]string{
 	VersionsTFNotSymlink:    "versions-tf-symlink",
 	MissingValidation:       "missing-validation",
 	SensitiveOutput:         "sensitive-output",
+	DependencyMergeOrder:    "dependency-merge-order",
 }
 
 // filterErrors removes errors for disabled rules.

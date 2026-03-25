@@ -16,6 +16,7 @@ import (
 type TerragruntConfig struct {
 	Source             string
 	Inputs             map[string]hcl.Expression
+	InputsExpr         hcl.Expression     // raw inputs expression (for rules that need to analyze structure)
 	DepRefs            []string           // dep names referenced via dependency.<name>.outputs in merge()
 	Dependencies       []DependencyConfig // all parsed dependency blocks
 	EvalCtx            *hcl.EvalContext   // context used for evaluating input expressions
@@ -180,6 +181,7 @@ func parseBody(body hcl.Body, path string) (*TerragruntConfig, error) {
 			return nil, fmt.Errorf("extracting inputs from %s: %w", path, err)
 		}
 		cfg.Inputs = inputs
+		cfg.InputsExpr = attr.Expr
 		cfg.DepRefs = ExtractDepRefs(attr.Expr)
 	}
 

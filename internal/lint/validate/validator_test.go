@@ -865,3 +865,56 @@ func TestFile_NoProviderBlock_DisabledByDefault(t *testing.T) {
 		assert.NotEqual(t, NoProviderBlock, e.Kind)
 	}
 }
+
+func TestFile_DependencyMergeOrder_DisabledByDefault(t *testing.T) {
+	cfg := config.Default()
+	errs, err := File(testdataPath("dep-merge-order"), Options{Config: &cfg.Lint})
+	require.NoError(t, err)
+	for _, e := range errs {
+		assert.NotEqual(t, DependencyMergeOrder, e.Kind)
+	}
+}
+
+func TestFile_DependencyMergeOrder_WrongOrder(t *testing.T) {
+	cfg := &config.LintConfig{
+		Rules: map[string]config.RuleConfig{
+			"dependency-merge-order": {
+				Enabled: true,
+				Options: map[string]interface{}{
+					"first": []interface{}{"project", "network"},
+				},
+			},
+		},
+	}
+	errs, err := File(testdataPath("dep-merge-order"), Options{Config: cfg})
+	require.NoError(t, err)
+
+	var mergeErrs []Error
+	for _, e := range errs {
+		if e.Kind == DependencyMergeOrder {
+			mergeErrs = append(mergeErrs, e)
+		}
+	}
+	require.Len(t, mergeErrs, 1)
+	assert.Equal(t, "project", mergeErrs[0].Variable)
+	assert.Contains(t, mergeErrs[0].Detail, "should appear before")
+}
+
+func TestFile_DependencyMergeOrder_CorrectOrder(t *testing.T) {
+	cfg := &config.LintConfig{
+		Rules: map[string]config.RuleConfig{
+			"dependency-merge-order": {
+				Enabled: true,
+				Options: map[string]interface{}{
+					"first": []interface{}{"project", "network"},
+				},
+			},
+		},
+	}
+	errs, err := File(testdataPath("dep-merge-order-valid"), Options{Config: cfg})
+	require.NoError(t, err)
+
+	for _, e := range errs {
+		assert.NotEqual(t, DependencyMergeOrder, e.Kind)
+	}
+}

@@ -17,6 +17,7 @@ var (
 	lintAllFlag    bool
 	lintConfigFlag string
 	lintStrictFlag bool
+	lintFormatFlag string
 )
 
 var lintCmd = &cobra.Command{
@@ -30,6 +31,7 @@ func init() {
 	lintCmd.Flags().BoolVar(&lintAllFlag, "all", false, "Lint all subdirectories")
 	lintCmd.Flags().StringVar(&lintConfigFlag, "config", "", "Path to config file (default: auto-discover)")
 	lintCmd.Flags().BoolVar(&lintStrictFlag, "strict", false, "Treat warnings as errors")
+	lintCmd.Flags().StringVar(&lintFormatFlag, "format", "text", "Output format (text, json)")
 }
 
 func runLint(cmd *cobra.Command, args []string) error {
@@ -78,8 +80,24 @@ func runLint(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	if len(errs) > 0 || lintFormatFlag == "json" {
+		switch lintFormatFlag {
+		case "json":
+			if err := report.PrintJSON(os.Stdout, errs); err != nil {
+				return fmt.Errorf("lint: json output: %w", err)
+			}
+		default:
+			if len(errs) > 0 {
+				report.Print(os.Stdout, errs)
+			}
+		}
+	}
+
+	if len(errs) == 0 && lintFormatFlag != "json" {
+		output.Success("No issues found")
+	}
+
 	if len(errs) > 0 {
-		report.Print(os.Stdout, errs)
 		if errorCount > 0 {
 			if warningCount > 0 && strict {
 				return fmt.Errorf("lint: found %d error(s), %d warning(s)", errorCount, warningCount)
@@ -92,6 +110,5 @@ func runLint(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	output.Success("No issues found")
 	return nil
 }

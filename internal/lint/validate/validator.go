@@ -31,6 +31,7 @@ const (
 	ExtraInput
 	TypeMismatch // Phase 5
 	SourceRefSemver
+	SourceProtocol
 )
 
 func (k ErrorKind) String() string {
@@ -43,6 +44,8 @@ func (k ErrorKind) String() string {
 		return "type mismatch"
 	case SourceRefSemver:
 		return "non-semver source ref"
+	case SourceProtocol:
+		return "disallowed source protocol"
 	default:
 		return "unknown"
 	}
@@ -103,6 +106,48 @@ func checkSourceRef(source, file string, opts Options) []Error {
 	}}
 }
 
+// isSSHSource reports whether a remote source uses SSH transport.
+func isSSHSource(source string) bool {
+	base, ok := strings.CutPrefix(source, "git::")
+	if !ok {
+		base = source
+	}
+	return strings.Contains(base, "git@")
+}
+
+// checkSourceProtocol enforces the transport protocol used in remote source URLs.
+func checkSourceProtocol(source, file string, opts Options) []Error {
+	if !hclutils.IsRemoteSource(source) {
+		return nil
+	}
+	if strings.HasPrefix(source, "tfr://") || strings.HasPrefix(source, "s3://") {
+		return nil
+	}
+
+	enforce := getEnforceOption(opts, "source-protocol")
+	switch enforce {
+	case "https":
+		if isSSHSource(source) {
+			return []Error{{
+				File:     file,
+				Kind:     SourceProtocol,
+				Severity: SeverityError,
+				Detail:   fmt.Sprintf("source %q uses SSH transport; HTTPS is required", source),
+			}}
+		}
+	case "ssh":
+		if !isSSHSource(source) {
+			return []Error{{
+				File:     file,
+				Kind:     SourceProtocol,
+				Severity: SeverityError,
+				Detail:   fmt.Sprintf("source %q uses HTTPS transport; SSH is required", source),
+			}}
+		}
+	}
+	return nil
+}
+
 // applyAllowList downgrades ExtraInput errors to warnings if the variable matches an allow pattern.
 func applyAllowList(errs []Error, opts Options) []Error {
 	patterns := getAllowPatterns(opts, "extra-input")
@@ -147,6 +192,7 @@ func File(path string, opts ...Options) ([]Error, error) {
 
 	var results []Error
 	results = append(results, checkSourceRef(cfg.Source, absPath, opt)...)
+	results = append(results, checkSourceProtocol(cfg.Source, absPath, opt)...)
 
 	modulePath := hclutils.ResolveSource(cfg.Source, absPath)
 	if modulePath == "" {
@@ -208,6 +254,12 @@ func StackFile(path string, opts ...Options) ([]Error, error) {
 			refErrs[i].Detail = fmt.Sprintf("[unit %q] %s", unit.Name, refErrs[i].Detail)
 		}
 		allErrors = append(allErrors, refErrs...)
+
+		protoErrs := checkSourceProtocol(unit.Source, absPath, opt)
+		for i := range protoErrs {
+			protoErrs[i].Detail = fmt.Sprintf("[unit %q] %s", unit.Name, protoErrs[i].Detail)
+		}
+		allErrors = append(allErrors, protoErrs...)
 
 		modulePath := hclutils.ResolveSource(unit.Source, absPath)
 		if modulePath == "" {
@@ -299,8 +351,19 @@ func TerraformDir(dir string, opts ...Options) ([]Error, error) {
 
 	envVarKeys := tfVarEnvKeys()
 
+	var opt Options
+	if len(opts) > 0 {
+		opt = opts[0]
+	}
+
 	var allErrors []Error
 	for _, mc := range calls {
+		protoErrs := checkSourceProtocol(mc.Source, absDir, opt)
+		for i := range protoErrs {
+			protoErrs[i].Detail = fmt.Sprintf("[module %q] %s", mc.Name, protoErrs[i].Detail)
+		}
+		allErrors = append(allErrors, protoErrs...)
+
 		modulePath := hclutils.ResolveSource(mc.Source, filepath.Join(absDir, "main.tf"))
 		if modulePath == "" {
 			continue // remote/registry source — skip
@@ -321,11 +384,6 @@ func TerraformDir(dir string, opts ...Options) ([]Error, error) {
 			mcErrors[i].Detail = fmt.Sprintf("[module %q] %s", mc.Name, mcErrors[i].Detail)
 		}
 		allErrors = append(allErrors, mcErrors...)
-	}
-
-	var opt Options
-	if len(opts) > 0 {
-		opt = opts[0]
 	}
 
 	return filterErrors(applyAllowList(allErrors, opt), opt), nil

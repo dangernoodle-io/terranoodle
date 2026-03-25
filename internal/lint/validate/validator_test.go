@@ -332,6 +332,7 @@ func TestErrorKind_String(t *testing.T) {
 		{ExtraInput, "extra input"},
 		{TypeMismatch, "type mismatch"},
 		{SourceRefSemver, "non-semver source ref"},
+		{SourceProtocol, "disallowed source protocol"},
 		{ErrorKind(999), "unknown"},
 	}
 
@@ -579,4 +580,109 @@ func TestFile_ExtraInputAllowNoMatch(t *testing.T) {
 	for _, e := range errs {
 		assert.Equal(t, SeverityError, e.Severity, "non-matching allow should keep error severity")
 	}
+}
+
+func TestCheckSourceProtocol_LocalSource(t *testing.T) {
+	errs := checkSourceProtocol("../module", "/test/terragrunt.hcl", Options{})
+	assert.Empty(t, errs)
+}
+
+func TestCheckSourceProtocol_TfrSource(t *testing.T) {
+	errs := checkSourceProtocol("tfr://registry.terraform.io/hashicorp/vpc/aws", "/test/terragrunt.hcl", Options{})
+	assert.Empty(t, errs)
+}
+
+func TestCheckSourceProtocol_S3Source(t *testing.T) {
+	errs := checkSourceProtocol("s3://acme-corp-modules/vpc", "/test/terragrunt.hcl", Options{})
+	assert.Empty(t, errs)
+}
+
+func TestCheckSourceProtocol_NoEnforce(t *testing.T) {
+	sshSrc := "git::git@github.com:acme-corp/modules.git//vpc?ref=v1.0.0"
+	httpsSrc := "git::https://github.com/acme-corp/modules.git//vpc?ref=v1.0.0"
+	assert.Empty(t, checkSourceProtocol(sshSrc, "/test/f.hcl", Options{}))
+	assert.Empty(t, checkSourceProtocol(httpsSrc, "/test/f.hcl", Options{}))
+}
+
+func TestCheckSourceProtocol_EnforceHTTPS_FlagsSSH(t *testing.T) {
+	cfg := &config.LintConfig{
+		Rules: map[string]config.RuleConfig{
+			"source-protocol": {Enabled: true, Options: map[string]interface{}{
+				"enforce": "https",
+			}},
+		},
+	}
+	opts := Options{Config: cfg}
+	errs := checkSourceProtocol("git::git@github.com:acme-corp/modules.git//vpc?ref=v1.0.0", "/test/f.hcl", opts)
+	require.Len(t, errs, 1)
+	assert.Equal(t, SourceProtocol, errs[0].Kind)
+	assert.Equal(t, SeverityError, errs[0].Severity)
+	assert.Contains(t, errs[0].Detail, "SSH")
+}
+
+func TestCheckSourceProtocol_EnforceHTTPS_AllowsHTTPS(t *testing.T) {
+	cfg := &config.LintConfig{
+		Rules: map[string]config.RuleConfig{
+			"source-protocol": {Enabled: true, Options: map[string]interface{}{
+				"enforce": "https",
+			}},
+		},
+	}
+	opts := Options{Config: cfg}
+	sources := []string{
+		"git::https://github.com/acme-corp/modules.git//vpc?ref=v1.0.0",
+		"github.com/acme-corp/modules//vpc?ref=v1.0.0",
+		"gitlab.com/acme-corp/modules//vpc?ref=v1.0.0",
+	}
+	for _, src := range sources {
+		assert.Empty(t, checkSourceProtocol(src, "/test/f.hcl", opts), "expected no error for %q", src)
+	}
+}
+
+func TestCheckSourceProtocol_EnforceSSH_FlagsHTTPS(t *testing.T) {
+	cfg := &config.LintConfig{
+		Rules: map[string]config.RuleConfig{
+			"source-protocol": {Enabled: true, Options: map[string]interface{}{
+				"enforce": "ssh",
+			}},
+		},
+	}
+	opts := Options{Config: cfg}
+	sources := []string{
+		"git::https://github.com/acme-corp/modules.git//vpc?ref=v1.0.0",
+		"github.com/acme-corp/modules//vpc?ref=v1.0.0",
+		"gitlab.com/acme-corp/modules//vpc?ref=v1.0.0",
+	}
+	for _, src := range sources {
+		errs := checkSourceProtocol(src, "/test/f.hcl", opts)
+		require.Len(t, errs, 1, "expected 1 error for %q", src)
+		assert.Equal(t, SourceProtocol, errs[0].Kind)
+		assert.Contains(t, errs[0].Detail, "HTTPS")
+	}
+}
+
+func TestCheckSourceProtocol_EnforceSSH_AllowsSSH(t *testing.T) {
+	cfg := &config.LintConfig{
+		Rules: map[string]config.RuleConfig{
+			"source-protocol": {Enabled: true, Options: map[string]interface{}{
+				"enforce": "ssh",
+			}},
+		},
+	}
+	opts := Options{Config: cfg}
+	errs := checkSourceProtocol("git::git@github.com:acme-corp/modules.git//vpc?ref=v1.0.0", "/test/f.hcl", opts)
+	assert.Empty(t, errs)
+}
+
+func TestCheckSourceProtocol_EnforceAny(t *testing.T) {
+	cfg := &config.LintConfig{
+		Rules: map[string]config.RuleConfig{
+			"source-protocol": {Enabled: true, Options: map[string]interface{}{
+				"enforce": "any",
+			}},
+		},
+	}
+	opts := Options{Config: cfg}
+	assert.Empty(t, checkSourceProtocol("git::git@github.com:acme-corp/modules.git//vpc", "/test/f.hcl", opts))
+	assert.Empty(t, checkSourceProtocol("git::https://github.com/acme-corp/modules.git//vpc", "/test/f.hcl", opts))
 }

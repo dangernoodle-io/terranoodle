@@ -14,6 +14,7 @@ var ruleNames = map[ErrorKind]string{
 	ExtraInput:      "extra-input",
 	TypeMismatch:    "type-mismatch",
 	SourceRefSemver: "source-ref-semver",
+	SourceProtocol:  "source-protocol",
 }
 
 // filterErrors removes errors for disabled rules.
@@ -69,4 +70,23 @@ func getAllowPatterns(opts Options, ruleName string) []string { //nolint:unparam
 		}
 	}
 	return patterns
+}
+
+// getEnforceOption reads the "enforce" option from a rule's config.
+func getEnforceOption(opts Options, ruleName string) string { //nolint:unparam // ruleName is generic for future rules
+	if opts.Config == nil {
+		return ""
+	}
+	rule, ok := opts.Config.Rules[ruleName]
+	if !ok {
+		return ""
+	}
+	raw, ok := rule.Options["enforce"]
+	if !ok {
+		return ""
+	}
+	if s, ok := raw.(string); ok {
+		return s
+	}
+	return ""
 }

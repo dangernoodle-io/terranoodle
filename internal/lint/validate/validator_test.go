@@ -331,6 +331,7 @@ func TestErrorKind_String(t *testing.T) {
 		{MissingRequired, "missing required input"},
 		{ExtraInput, "extra input"},
 		{TypeMismatch, "type mismatch"},
+		{SourceRefSemver, "non-semver source ref"},
 		{ErrorKind(999), "unknown"},
 	}
 
@@ -390,4 +391,96 @@ func TestSeverityDefault(t *testing.T) {
 func TestErrorWithWarningSeverity(t *testing.T) {
 	e := Error{Severity: SeverityWarning}
 	assert.Equal(t, SeverityWarning, e.Severity)
+}
+
+func TestCheckSourceRef_Semver(t *testing.T) {
+	sources := []string{
+		"git::https://example.com/modules/vpc.git?ref=v1.0.0",
+		"git::https://example.com/modules/vpc.git?ref=1.2.3",
+		"git::https://example.com/modules/vpc.git?ref=v0.3.0-beta.1",
+	}
+	for _, src := range sources {
+		errs := checkSourceRef(src, "/test/terragrunt.hcl", Options{})
+		assert.Empty(t, errs, "expected no errors for source %q", src)
+	}
+}
+
+func TestCheckSourceRef_NonSemver(t *testing.T) {
+	sources := []string{
+		"git::https://example.com/modules/vpc.git?ref=main",
+		"git::https://example.com/modules/vpc.git?ref=master",
+		"git::https://example.com/modules/vpc.git?ref=abc1234def5678",
+	}
+	for _, src := range sources {
+		errs := checkSourceRef(src, "/test/terragrunt.hcl", Options{})
+		require.Len(t, errs, 1, "expected 1 error for source %q", src)
+		assert.Equal(t, SourceRefSemver, errs[0].Kind)
+		assert.Equal(t, SeverityError, errs[0].Severity)
+	}
+}
+
+func TestCheckSourceRef_AllowPatternMatch(t *testing.T) {
+	cfg := &config.LintConfig{
+		Rules: map[string]config.RuleConfig{
+			"source-ref-semver": {Enabled: true, Options: map[string]interface{}{
+				"allow": []interface{}{"jae/*", "feature/*"},
+			}},
+		},
+	}
+	opts := Options{Config: cfg}
+	errs := checkSourceRef("git::https://example.com/repo.git?ref=jae/add-widget", "/test/terragrunt.hcl", opts)
+	require.Len(t, errs, 1)
+	assert.Equal(t, SeverityWarning, errs[0].Severity)
+}
+
+func TestCheckSourceRef_AllowExactMatch(t *testing.T) {
+	cfg := &config.LintConfig{
+		Rules: map[string]config.RuleConfig{
+			"source-ref-semver": {Enabled: true, Options: map[string]interface{}{
+				"allow": []interface{}{"develop"},
+			}},
+		},
+	}
+	opts := Options{Config: cfg}
+	errs := checkSourceRef("git::https://example.com/repo.git?ref=develop", "/test/terragrunt.hcl", opts)
+	require.Len(t, errs, 1)
+	assert.Equal(t, SeverityWarning, errs[0].Severity)
+}
+
+func TestCheckSourceRef_AllowNoMatch(t *testing.T) {
+	cfg := &config.LintConfig{
+		Rules: map[string]config.RuleConfig{
+			"source-ref-semver": {Enabled: true, Options: map[string]interface{}{
+				"allow": []interface{}{"jae/*"},
+			}},
+		},
+	}
+	opts := Options{Config: cfg}
+	errs := checkSourceRef("git::https://example.com/repo.git?ref=main", "/test/terragrunt.hcl", opts)
+	require.Len(t, errs, 1)
+	assert.Equal(t, SeverityError, errs[0].Severity)
+}
+
+func TestCheckSourceRef_NoRef(t *testing.T) {
+	errs := checkSourceRef("git::https://example.com/modules/vpc.git", "/test/terragrunt.hcl", Options{})
+	assert.Empty(t, errs)
+}
+
+func TestCheckSourceRef_LocalSource(t *testing.T) {
+	errs := checkSourceRef("../module", "/test/terragrunt.hcl", Options{})
+	assert.Empty(t, errs)
+}
+
+func TestCheckSourceRef_TfrSource(t *testing.T) {
+	errs := checkSourceRef("tfr://registry.example.com/modules/vpc?ref=main", "/test/terragrunt.hcl", Options{})
+	assert.Empty(t, errs)
+}
+
+func TestFile_SourceRefSemver(t *testing.T) {
+	errs, err := File(testdataPath("non-semver-ref"))
+	require.NoError(t, err)
+	require.Len(t, errs, 1)
+	assert.Equal(t, SourceRefSemver, errs[0].Kind)
+	assert.Equal(t, SeverityError, errs[0].Severity)
+	assert.Contains(t, errs[0].Detail, "main")
 }

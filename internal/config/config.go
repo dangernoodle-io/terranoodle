@@ -228,9 +228,10 @@ func Default() *Config {
 	return &Config{
 		Lint: LintConfig{
 			Rules: map[string]RuleConfig{
-				"missing-required": {Enabled: true},
-				"extra-input":      {Enabled: true},
-				"type-mismatch":    {Enabled: true},
+				"missing-required":  {Enabled: true},
+				"extra-input":       {Enabled: true},
+				"type-mismatch":     {Enabled: true},
+				"source-ref-semver": {Enabled: true},
 			},
 		},
 	}

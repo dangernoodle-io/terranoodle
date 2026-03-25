@@ -10,6 +10,7 @@ import (
 	"dangernoodle.io/terranoodle/internal/hclutils"
 	"dangernoodle.io/terranoodle/internal/hclutils/tfmod"
 	"dangernoodle.io/terranoodle/internal/hclutils/tftype"
+	goversion "github.com/hashicorp/go-version"
 	"github.com/hashicorp/hcl/v2"
 	"github.com/zclconf/go-cty/cty"
 )
@@ -29,6 +30,7 @@ const (
 	MissingRequired ErrorKind = iota
 	ExtraInput
 	TypeMismatch // Phase 5
+	SourceRefSemver
 )
 
 func (k ErrorKind) String() string {
@@ -39,6 +41,8 @@ func (k ErrorKind) String() string {
 		return "extra input"
 	case TypeMismatch:
 		return "type mismatch"
+	case SourceRefSemver:
+		return "non-semver source ref"
 	default:
 		return "unknown"
 	}
@@ -70,6 +74,35 @@ func tfVarEnvKeys() map[string]bool {
 	return keys
 }
 
+// checkSourceRef validates that remote source refs are semver versions.
+// Returns nil for local sources, tfr:// sources, or sources without refs.
+// Returns an error (downgraded to warning if matched by allow list) for non-semver refs.
+func checkSourceRef(source, file string, opts Options) []Error {
+	if !hclutils.IsRemoteSource(source) || strings.HasPrefix(source, "tfr://") {
+		return nil
+	}
+	_, _, ref := hclutils.StripSubdir(source)
+	if ref == "" {
+		return nil
+	}
+	if _, err := goversion.NewVersion(ref); err == nil {
+		return nil
+	}
+	sev := SeverityError
+	for _, pattern := range getAllowPatterns(opts, "source-ref-semver") {
+		if matched, _ := filepath.Match(pattern, ref); matched {
+			sev = SeverityWarning
+			break
+		}
+	}
+	return []Error{{
+		File:     file,
+		Kind:     SourceRefSemver,
+		Severity: sev,
+		Detail:   fmt.Sprintf("source ref %q is not a semver version", ref),
+	}}
+}
+
 // File validates a single terragrunt.hcl file.
 func File(path string, opts ...Options) ([]Error, error) {
 	absPath, err := filepath.Abs(path)
@@ -87,12 +120,23 @@ func File(path string, opts ...Options) ([]Error, error) {
 		return nil, nil
 	}
 
+	var opt Options
+	if len(opts) > 0 {
+		opt = opts[0]
+	}
+
+	var results []Error
+	results = append(results, checkSourceRef(cfg.Source, absPath, opt)...)
+
 	modulePath := hclutils.ResolveSource(cfg.Source, absPath)
 	if modulePath == "" {
 		if hclutils.IsRemoteSource(cfg.Source) {
+			if len(results) > 0 {
+				return filterErrors(results, opt), nil
+			}
 			return nil, fmt.Errorf("cannot resolve remote source %q — run 'terragrunt init' first to populate .terragrunt-cache/", cfg.Source)
 		}
-		return nil, nil
+		return filterErrors(results, opt), nil
 	}
 
 	moduleDir, err := tfmod.ResolveModuleDir(modulePath)
@@ -109,13 +153,9 @@ func File(path string, opts ...Options) ([]Error, error) {
 	envVarKeys := tfVarEnvKeys()
 	tfVarKeys := hclutils.ParseTfVarKeys(cfg.TfVarFiles)
 
-	var opt Options
-	if len(opts) > 0 {
-		opt = opts[0]
-	}
-
 	errs := check(absPath, cfg.Inputs, variables, depOutputKeys, envVarKeys, cfg.IncludeInputKeys, tfVarKeys, cfg.EvalCtx)
-	return filterErrors(errs, opt), nil
+	results = append(results, errs...)
+	return filterErrors(results, opt), nil
 }
 
 // StackFile validates a terragrunt.stack.hcl file by checking each unit.
@@ -130,6 +170,11 @@ func StackFile(path string, opts ...Options) ([]Error, error) {
 		return nil, err
 	}
 
+	var opt Options
+	if len(opts) > 0 {
+		opt = opts[0]
+	}
+
 	envVarKeys := tfVarEnvKeys()
 
 	var allErrors []Error
@@ -137,6 +182,12 @@ func StackFile(path string, opts ...Options) ([]Error, error) {
 		if unit.Source == "" {
 			continue
 		}
+
+		refErrs := checkSourceRef(unit.Source, absPath, opt)
+		for i := range refErrs {
+			refErrs[i].Detail = fmt.Sprintf("[unit %q] %s", unit.Name, refErrs[i].Detail)
+		}
+		allErrors = append(allErrors, refErrs...)
 
 		modulePath := hclutils.ResolveSource(unit.Source, absPath)
 		if modulePath == "" {
@@ -160,11 +211,6 @@ func StackFile(path string, opts ...Options) ([]Error, error) {
 			unitErrors[i].Detail = fmt.Sprintf("[unit %q] %s", unit.Name, unitErrors[i].Detail)
 		}
 		allErrors = append(allErrors, unitErrors...)
-	}
-
-	var opt Options
-	if len(opts) > 0 {
-		opt = opts[0]
 	}
 
 	return filterErrors(allErrors, opt), nil

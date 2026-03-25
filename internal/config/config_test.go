@@ -655,8 +655,9 @@ func TestDefault(t *testing.T) {
 	cfg := Default()
 
 	assert.NotNil(t, cfg)
-	assert.Equal(t, 3, len(cfg.Lint.Rules))
+	assert.Equal(t, 4, len(cfg.Lint.Rules))
 	assert.Equal(t, true, cfg.Lint.Rules["missing-required"].Enabled)
 	assert.Equal(t, true, cfg.Lint.Rules["extra-input"].Enabled)
 	assert.Equal(t, true, cfg.Lint.Rules["type-mismatch"].Enabled)
+	assert.Equal(t, true, cfg.Lint.Rules["source-ref-semver"].Enabled)
 }

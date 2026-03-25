@@ -13,6 +13,7 @@ var ruleNames = map[ErrorKind]string{
 	MissingRequired: "missing-required",
 	ExtraInput:      "extra-input",
 	TypeMismatch:    "type-mismatch",
+	SourceRefSemver: "source-ref-semver",
 }
 
 // filterErrors removes errors for disabled rules.
@@ -42,4 +43,30 @@ func isExcludedDir(name string, opts Options) bool {
 		}
 	}
 	return false
+}
+
+// getAllowPatterns reads the "allow" option from a rule's config.
+func getAllowPatterns(opts Options, ruleName string) []string { //nolint:unparam // ruleName is generic for future rules
+	if opts.Config == nil {
+		return nil
+	}
+	rule, ok := opts.Config.Rules[ruleName]
+	if !ok {
+		return nil
+	}
+	raw, ok := rule.Options["allow"]
+	if !ok {
+		return nil
+	}
+	items, ok := raw.([]interface{})
+	if !ok {
+		return nil
+	}
+	patterns := make([]string, 0, len(items))
+	for _, item := range items {
+		if s, ok := item.(string); ok {
+			patterns = append(patterns, s)
+		}
+	}
+	return patterns
 }

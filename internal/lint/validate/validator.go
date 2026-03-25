@@ -45,6 +45,7 @@ const (
 	MissingProviderVersion
 	DuplicateProvider
 	NoProviderBlock
+	SetStringType
 )
 
 func (k ErrorKind) String() string {
@@ -83,6 +84,8 @@ func (k ErrorKind) String() string {
 		return "duplicate provider"
 	case NoProviderBlock:
 		return "provider block in terragrunt config"
+	case SetStringType:
+		return "set(string) type usage"
 	default:
 		return "unknown"
 	}
@@ -563,6 +566,20 @@ func ModuleDir(dir string, opts ...Options) ([]Error, error) {
 					Variable: v.Name,
 					Kind:     OptionalWithoutDefault,
 					Detail:   fmt.Sprintf("variable %q has optional() attribute without a default value", v.Name),
+				})
+			}
+		}
+	}
+
+	// Rule: set-string-type
+	if opt.Config != nil && opt.Config.IsRuleEnabled("set-string-type", absDir) {
+		for _, v := range variables {
+			if tfmod.HasSetString(v.Type) {
+				errs = append(errs, Error{
+					File:     absDir,
+					Variable: v.Name,
+					Kind:     SetStringType,
+					Detail:   fmt.Sprintf("variable %q uses set(string) — consider list(string) instead", v.Name),
 				})
 			}
 		}

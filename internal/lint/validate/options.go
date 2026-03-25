@@ -27,6 +27,7 @@ var ruleNames = map[ErrorKind]string{
 	MissingProviderVersion: "versions-tf",
 	DuplicateProvider:      "versions-tf",
 	NoProviderBlock:        "no-provider-block",
+	SetStringType:          "set-string-type",
 }
 
 // filterErrors removes errors for disabled rules.

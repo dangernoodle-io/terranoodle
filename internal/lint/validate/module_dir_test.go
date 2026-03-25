@@ -295,3 +295,27 @@ func TestModuleDir_VersionsTF_DisabledByDefault(t *testing.T) {
 		assert.NotEqual(t, MissingVersionsTF, e.Kind)
 	}
 }
+
+func TestModuleDir_SetStringType(t *testing.T) {
+	cfg := &config.LintConfig{Rules: map[string]config.RuleConfig{
+		"set-string-type": {Enabled: true},
+	}}
+	errs, err := ModuleDir(moduleDirTestdata("set-string-type"), Options{Config: cfg})
+	require.NoError(t, err)
+	var setErrs []Error
+	for _, e := range errs {
+		if e.Kind == SetStringType {
+			setErrs = append(setErrs, e)
+		}
+	}
+	require.Len(t, setErrs, 2)
+}
+
+func TestModuleDir_SetStringType_DisabledByDefault(t *testing.T) {
+	cfg := config.Default()
+	errs, err := ModuleDir(moduleDirTestdata("set-string-type"), Options{Config: &cfg.Lint})
+	require.NoError(t, err)
+	for _, e := range errs {
+		assert.NotEqual(t, SetStringType, e.Kind)
+	}
+}

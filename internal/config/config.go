@@ -239,6 +239,7 @@ func Default() *Config {
 				"allowed-filenames":        {Enabled: false},
 				"versions-tf":              {Enabled: false},
 				"no-provider-block":        {Enabled: false},
+				"set-string-type":          {Enabled: false},
 			},
 		},
 	}

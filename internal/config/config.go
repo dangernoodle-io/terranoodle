@@ -255,6 +255,7 @@ func Default() *Config {
 				"provider-constraint-style": {Enabled: false},
 				"empty-outputs-tf":          {Enabled: false},
 				"versions-tf-symlink":       {Enabled: false},
+				"missing-validation":        {Enabled: false},
 			},
 		},
 	}

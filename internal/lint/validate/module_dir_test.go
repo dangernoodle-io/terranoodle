@@ -30,6 +30,7 @@ func TestModuleDir_MissingDescription(t *testing.T) {
 		"optional-without-default": {Enabled: false},
 		"allowed-filenames":        {Enabled: false},
 		"has-versions-tf":          {Enabled: false},
+		"missing-validation":       {Enabled: false},
 	}}
 	errs, err := ModuleDir(moduleDirTestdata("module-quality"), Options{Config: cfg})
 	require.NoError(t, err)
@@ -47,6 +48,7 @@ func TestModuleDir_NonSnakeCase(t *testing.T) {
 		"optional-without-default": {Enabled: false},
 		"allowed-filenames":        {Enabled: false},
 		"has-versions-tf":          {Enabled: false},
+		"missing-validation":       {Enabled: false},
 	}}
 	errs, err := ModuleDir(moduleDirTestdata("module-quality"), Options{Config: cfg})
 	require.NoError(t, err)
@@ -64,6 +66,7 @@ func TestModuleDir_BothRulesEnabled(t *testing.T) {
 		"optional-without-default": {Enabled: false},
 		"allowed-filenames":        {Enabled: false},
 		"has-versions-tf":          {Enabled: false},
+		"missing-validation":       {Enabled: false},
 	}}
 	errs, err := ModuleDir(moduleDirTestdata("module-quality"), Options{Config: cfg})
 	require.NoError(t, err)
@@ -82,6 +85,7 @@ func TestModuleDir_AllClean(t *testing.T) {
 		"optional-without-default": {Enabled: false},
 		"allowed-filenames":        {Enabled: false},
 		"has-versions-tf":          {Enabled: false},
+		"missing-validation":       {Enabled: false},
 	}}
 	errs, err := ModuleDir(dir, Options{Config: cfg})
 	require.NoError(t, err)
@@ -101,9 +105,10 @@ func TestModuleDir_NonexistentDir(t *testing.T) {
 
 func TestModuleDir_UnusedVariable(t *testing.T) {
 	cfg := &config.LintConfig{Rules: map[string]config.RuleConfig{
-		"unused-variables":  {Enabled: true},
-		"allowed-filenames": {Enabled: false},
-		"has-versions-tf":   {Enabled: false},
+		"unused-variables":   {Enabled: true},
+		"allowed-filenames":  {Enabled: false},
+		"has-versions-tf":    {Enabled: false},
+		"missing-validation": {Enabled: false},
 	}}
 	errs, err := ModuleDir(moduleDirTestdata("unused-variables"), Options{Config: cfg})
 	require.NoError(t, err)
@@ -127,6 +132,7 @@ func TestModuleDir_OptionalWithoutDefault(t *testing.T) {
 		"unused-variables":         {Enabled: false},
 		"allowed-filenames":        {Enabled: false},
 		"has-versions-tf":          {Enabled: false},
+		"missing-validation":       {Enabled: false},
 	}}
 	errs, err := ModuleDir(moduleDirTestdata("optional-no-default"), Options{Config: cfg})
 	require.NoError(t, err)
@@ -514,5 +520,46 @@ func TestModuleDir_VersionsTFSymlink_Valid(t *testing.T) {
 	require.NoError(t, err)
 	for _, e := range errs {
 		assert.NotEqual(t, VersionsTFNotSymlink, e.Kind)
+	}
+}
+
+func TestModuleDir_MissingValidation_DisabledByDefault(t *testing.T) {
+	cfg := config.Default()
+	errs, err := ModuleDir(moduleDirTestdata("missing-validation"), Options{Config: &cfg.Lint})
+	require.NoError(t, err)
+	for _, e := range errs {
+		assert.NotEqual(t, MissingValidation, e.Kind)
+	}
+}
+
+func TestModuleDir_MissingValidation_Enabled(t *testing.T) {
+	cfg := &config.LintConfig{Rules: map[string]config.RuleConfig{
+		"missing-validation": {Enabled: true},
+	}}
+	errs, err := ModuleDir(moduleDirTestdata("missing-validation"), Options{Config: cfg})
+	require.NoError(t, err)
+	var validationErrs []Error
+	for _, e := range errs {
+		if e.Kind == MissingValidation {
+			validationErrs = append(validationErrs, e)
+		}
+	}
+	require.Len(t, validationErrs, 1)
+	assert.Equal(t, "project_id", validationErrs[0].Variable)
+}
+
+func TestModuleDir_MissingValidation_WithExclude(t *testing.T) {
+	cfg := &config.LintConfig{Rules: map[string]config.RuleConfig{
+		"missing-validation": {
+			Enabled: true,
+			Options: map[string]interface{}{
+				"exclude": []interface{}{"project_id"},
+			},
+		},
+	}}
+	errs, err := ModuleDir(moduleDirTestdata("missing-validation"), Options{Config: cfg})
+	require.NoError(t, err)
+	for _, e := range errs {
+		assert.NotEqual(t, MissingValidation, e.Kind)
 	}
 }

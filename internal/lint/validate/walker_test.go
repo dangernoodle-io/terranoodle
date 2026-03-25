@@ -223,6 +223,7 @@ inputs = {}
 			"optional-without-default": {Enabled: false},
 			"allowed-filenames":        {Enabled: false},
 			"has-versions-tf":          {Enabled: false},
+			"missing-validation":       {Enabled: false},
 		},
 	}
 	opts := Options{Config: cfg}

@@ -31,6 +31,7 @@ var ruleNames = map[ErrorKind]string{
 	ProviderConstraintStyle: "provider-constraint-style",
 	EmptyOutputsTF:          "empty-outputs-tf",
 	VersionsTFNotSymlink:    "versions-tf-symlink",
+	MissingValidation:       "missing-validation",
 }
 
 // filterErrors removes errors for disabled rules.

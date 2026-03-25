@@ -335,6 +335,8 @@ func TestErrorKind_String(t *testing.T) {
 		{SourceProtocol, "disallowed source protocol"},
 		{MissingDescription, "missing description"},
 		{NonSnakeCase, "non-snake-case name"},
+		{UnusedVariable, "UnusedVariable"},
+		{OptionalWithoutDefault, "OptionalWithoutDefault"},
 		{ErrorKind(999), "unknown"},
 	}
 

@@ -216,9 +216,11 @@ inputs = {}
 	cfg := &config.LintConfig{
 		ExcludeDirs: []string{"excluded-dir"},
 		Rules: map[string]config.RuleConfig{
-			"missing-required": {Enabled: true},
-			"extra-input":      {Enabled: true},
-			"type-mismatch":    {Enabled: true},
+			"missing-required":         {Enabled: true},
+			"extra-input":              {Enabled: true},
+			"type-mismatch":            {Enabled: true},
+			"unused-variable":          {Enabled: false},
+			"optional-without-default": {Enabled: false},
 		},
 	}
 	opts := Options{Config: cfg}

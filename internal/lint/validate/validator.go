@@ -35,6 +35,8 @@ const (
 	SourceProtocol
 	MissingDescription
 	NonSnakeCase
+	UnusedVariable
+	OptionalWithoutDefault
 )
 
 func (k ErrorKind) String() string {
@@ -53,6 +55,10 @@ func (k ErrorKind) String() string {
 		return "missing description"
 	case NonSnakeCase:
 		return "non-snake-case name"
+	case UnusedVariable:
+		return "UnusedVariable"
+	case OptionalWithoutDefault:
+		return "OptionalWithoutDefault"
 	default:
 		return "unknown"
 	}
@@ -457,6 +463,38 @@ func ModuleDir(dir string, opts ...Options) ([]Error, error) {
 				Kind:     NonSnakeCase,
 				Detail:   fmt.Sprintf("output name %q is not snake_case", o.Name),
 			})
+		}
+	}
+
+	// Rule: unused-variable — guard I/O behind rule check
+	if opt.Config != nil && opt.Config.IsRuleEnabled("unused-variable", absDir) {
+		refs, refErr := tfmod.CollectVarRefs(absDir)
+		if refErr != nil {
+			return nil, refErr
+		}
+		for _, v := range variables {
+			if !refs[v.Name] {
+				errs = append(errs, Error{
+					File:     absDir,
+					Variable: v.Name,
+					Kind:     UnusedVariable,
+					Detail:   fmt.Sprintf("variable %q is declared but never referenced", v.Name),
+				})
+			}
+		}
+	}
+
+	// Rule: optional-without-default
+	if opt.Config == nil || opt.Config.IsRuleEnabled("optional-without-default", absDir) {
+		for _, v := range variables {
+			if tfmod.HasOptionalWithoutDefault(v.Type) {
+				errs = append(errs, Error{
+					File:     absDir,
+					Variable: v.Name,
+					Kind:     OptionalWithoutDefault,
+					Detail:   fmt.Sprintf("variable %q has optional() attribute without a default value", v.Name),
+				})
+			}
 		}
 	}
 

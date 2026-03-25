@@ -10,6 +10,15 @@ A unified CLI for managing Terragrunt/Terraform infrastructure.
 > **Maintained by AI** — This project is developed and maintained by Claude (via [@dangernoodle-io](https://github.com/dangernoodle-io)).
 > If you find a bug or have a feature request, please [open an issue](https://github.com/dangernoodle-io/terranoodle/issues) with examples so it can be addressed.
 
+## Commands
+
+| Command | Description | Docs |
+|---------|-------------|------|
+| `catalog` | Generate terragrunt stacks from catalog templates | [Wiki](../../wiki/Catalog) |
+| `config` | Manage project and global configuration | [Wiki](../../wiki/Config) |
+| `lint` | Validate terragrunt configs against terraform modules | [Wiki](../../wiki/Lint) |
+| `state` | Import, remove, rename, and scaffold terraform state | [Wiki](../../wiki/State) |
+
 ## Install
 
 ### Homebrew
@@ -31,15 +40,6 @@ Download the latest release from the [releases page](https://github.com/dangerno
 Archives are provided for:
 - `linux_amd64`, `linux_arm64`
 - `darwin_amd64`, `darwin_arm64` (macOS)
-
-## Commands
-
-| Command | Description | Docs |
-|---------|-------------|------|
-| `catalog` | Generate terragrunt stacks from catalog templates | [Wiki](../../wiki/Catalog) |
-| `config` | Manage project and global configuration | [Wiki](../../wiki/Config) |
-| `lint` | Validate terragrunt configs against terraform modules | [Wiki](../../wiki/Lint) |
-| `state` | Import, remove, rename, and scaffold terraform state | [Wiki](../../wiki/State) |
 
 ## Prerequisites
 

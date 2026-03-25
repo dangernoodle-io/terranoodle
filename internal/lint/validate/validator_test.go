@@ -346,6 +346,7 @@ func TestErrorKind_String(t *testing.T) {
 		{DuplicateProvider, "duplicate provider"},
 		{NoProviderBlock, "provider block in terragrunt config"},
 		{SetStringType, "set(string) type usage"},
+		{ProviderConstraintStyle, "provider constraint style"},
 		{ErrorKind(999), "unknown"},
 	}
 

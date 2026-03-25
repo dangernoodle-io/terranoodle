@@ -655,7 +655,7 @@ func TestDefault(t *testing.T) {
 	cfg := Default()
 
 	assert.NotNil(t, cfg)
-	assert.Equal(t, 14, len(cfg.Lint.Rules))
+	assert.Equal(t, 15, len(cfg.Lint.Rules))
 	assert.Equal(t, true, cfg.Lint.Rules["missing-required"].Enabled)
 	assert.Equal(t, true, cfg.Lint.Rules["extra-input"].Enabled)
 	assert.Equal(t, true, cfg.Lint.Rules["type-mismatch"].Enabled)
@@ -670,4 +670,5 @@ func TestDefault(t *testing.T) {
 	assert.Equal(t, false, cfg.Lint.Rules["versions-tf"].Enabled)
 	assert.Equal(t, false, cfg.Lint.Rules["no-provider-block"].Enabled)
 	assert.Equal(t, false, cfg.Lint.Rules["set-string-type"].Enabled)
+	assert.Equal(t, false, cfg.Lint.Rules["provider-constraint-style"].Enabled)
 }

@@ -46,6 +46,7 @@ const (
 	DuplicateProvider
 	NoProviderBlock
 	SetStringType
+	ProviderConstraintStyle
 )
 
 func (k ErrorKind) String() string {
@@ -86,6 +87,8 @@ func (k ErrorKind) String() string {
 		return "provider block in terragrunt config"
 	case SetStringType:
 		return "set(string) type usage"
+	case ProviderConstraintStyle:
+		return "provider constraint style"
 	default:
 		return "unknown"
 	}
@@ -682,6 +685,22 @@ func ModuleDir(dir string, opts ...Options) ([]Error, error) {
 				}
 			}
 		}
+
+		// Rule: provider-constraint-style — check after existing provider validations
+		style := getStringOption(opt, "provider-constraint-style", "style")
+		depth := getStringOption(opt, "provider-constraint-style", "depth")
+		if style != "" {
+			for _, p := range vResult.Providers {
+				if p.HasVersion && !checkConstraintStyle(p.Version, style, depth) {
+					errs = append(errs, Error{
+						File:     absDir,
+						Variable: p.Name,
+						Kind:     ProviderConstraintStyle,
+						Detail:   fmt.Sprintf("provider %q version constraint %q does not match required style %q", p.Name, p.Version, describeStyle(style, depth)),
+					})
+				}
+			}
+		}
 	}
 
 	return filterErrors(errs, opt), nil
@@ -809,4 +828,41 @@ func check(file string, inputs map[string]hcl.Expression, variables []tfmod.Vari
 	}
 
 	return errs
+}
+
+// checkConstraintStyle validates that a version constraint matches the required style and optional depth.
+func checkConstraintStyle(version, style, depth string) bool {
+	trimmed := strings.TrimSpace(version)
+	switch style {
+	case "pessimistic":
+		if !strings.HasPrefix(trimmed, "~>") {
+			return false
+		}
+		if depth == "" {
+			return true
+		}
+		num := strings.TrimSpace(strings.TrimPrefix(trimmed, "~>"))
+		parts := strings.Split(num, ".")
+		switch depth {
+		case "major":
+			return len(parts) == 2 && parts[1] == "0"
+		case "minor":
+			return len(parts) == 2 && parts[1] != "0"
+		case "patch":
+			return len(parts) == 3
+		}
+	case "exact":
+		return strings.HasPrefix(trimmed, "=") && !strings.HasPrefix(trimmed, ">=")
+	case "range":
+		return strings.Contains(trimmed, ",")
+	}
+	return true
+}
+
+// describeStyle returns a human-readable description of the required style.
+func describeStyle(style, depth string) string {
+	if depth != "" {
+		return style + "/" + depth
+	}
+	return style
 }

@@ -319,3 +319,129 @@ func TestModuleDir_SetStringType_DisabledByDefault(t *testing.T) {
 		assert.NotEqual(t, SetStringType, e.Kind)
 	}
 }
+
+func TestModuleDir_ProviderConstraintStyle_Pessimistic(t *testing.T) {
+	cfg := &config.LintConfig{
+		Rules: map[string]config.RuleConfig{
+			"provider-constraint-style": {
+				Enabled: true,
+				Options: map[string]interface{}{
+					"style": "pessimistic",
+				},
+			},
+			"versions-tf": {Enabled: true},
+		},
+	}
+	errs, err := ModuleDir(moduleDirTestdata("constraint-style-bad"), Options{Config: cfg})
+	require.NoError(t, err)
+	var matched []Error
+	for _, e := range errs {
+		if e.Kind == ProviderConstraintStyle {
+			matched = append(matched, e)
+		}
+	}
+	require.Len(t, matched, 1)
+}
+
+func TestModuleDir_ProviderConstraintStyle_PessimisticMajorDepth(t *testing.T) {
+	cfg := &config.LintConfig{
+		Rules: map[string]config.RuleConfig{
+			"provider-constraint-style": {
+				Enabled: true,
+				Options: map[string]interface{}{
+					"style": "pessimistic",
+					"depth": "major",
+				},
+			},
+			"versions-tf": {Enabled: true},
+		},
+	}
+	errs, err := ModuleDir(moduleDirTestdata("constraint-style-good"), Options{Config: cfg})
+	require.NoError(t, err)
+	var matched []Error
+	for _, e := range errs {
+		if e.Kind == ProviderConstraintStyle {
+			matched = append(matched, e)
+		}
+	}
+	require.Len(t, matched, 0)
+}
+
+func TestModuleDir_ProviderConstraintStyle_PessimisticMinorDepthFails(t *testing.T) {
+	cfg := &config.LintConfig{
+		Rules: map[string]config.RuleConfig{
+			"provider-constraint-style": {
+				Enabled: true,
+				Options: map[string]interface{}{
+					"style": "pessimistic",
+					"depth": "minor",
+				},
+			},
+			"versions-tf": {Enabled: true},
+		},
+	}
+	errs, err := ModuleDir(moduleDirTestdata("constraint-style-good"), Options{Config: cfg})
+	require.NoError(t, err)
+	var matched []Error
+	for _, e := range errs {
+		if e.Kind == ProviderConstraintStyle {
+			matched = append(matched, e)
+		}
+	}
+	require.Len(t, matched, 1)
+}
+
+func TestModuleDir_ProviderConstraintStyle_Exact(t *testing.T) {
+	cfg := &config.LintConfig{
+		Rules: map[string]config.RuleConfig{
+			"provider-constraint-style": {
+				Enabled: true,
+				Options: map[string]interface{}{
+					"style": "exact",
+				},
+			},
+			"versions-tf": {Enabled: true},
+		},
+	}
+	errs, err := ModuleDir(moduleDirTestdata("constraint-style-exact"), Options{Config: cfg})
+	require.NoError(t, err)
+	var matched []Error
+	for _, e := range errs {
+		if e.Kind == ProviderConstraintStyle {
+			matched = append(matched, e)
+		}
+	}
+	require.Len(t, matched, 0)
+}
+
+func TestModuleDir_ProviderConstraintStyle_ExactFails(t *testing.T) {
+	cfg := &config.LintConfig{
+		Rules: map[string]config.RuleConfig{
+			"provider-constraint-style": {
+				Enabled: true,
+				Options: map[string]interface{}{
+					"style": "exact",
+				},
+			},
+			"versions-tf": {Enabled: true},
+		},
+	}
+	errs, err := ModuleDir(moduleDirTestdata("constraint-style-good"), Options{Config: cfg})
+	require.NoError(t, err)
+	var matched []Error
+	for _, e := range errs {
+		if e.Kind == ProviderConstraintStyle {
+			matched = append(matched, e)
+		}
+	}
+	require.Len(t, matched, 1)
+}
+
+func TestModuleDir_ProviderConstraintStyle_DisabledByDefault(t *testing.T) {
+	cfg := config.Default()
+	errs, err := ModuleDir(moduleDirTestdata("constraint-style-bad"), Options{Config: &cfg.Lint})
+	require.NoError(t, err)
+	for _, e := range errs {
+		assert.NotEqual(t, ProviderConstraintStyle, e.Kind)
+	}
+}

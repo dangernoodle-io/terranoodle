@@ -15,6 +15,7 @@ type ProviderDecl struct {
 	Name       string
 	HasSource  bool
 	HasVersion bool
+	Version    string
 	File       string
 }
 
@@ -99,6 +100,7 @@ func ParseVersionsTF(moduleDir string) (*VersionsResult, error) {
 							sv := val.GetAttr("version")
 							if sv.Type() == cty.String && sv.AsString() != "" {
 								pd.HasVersion = true
+								pd.Version = sv.AsString()
 							}
 						}
 					}

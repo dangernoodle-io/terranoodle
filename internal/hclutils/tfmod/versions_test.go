@@ -55,6 +55,7 @@ func TestParseVersionsTF_Valid(t *testing.T) {
 	assert.Equal(t, "aws", p.Name)
 	assert.True(t, p.HasSource)
 	assert.True(t, p.HasVersion)
+	assert.Equal(t, "~> 5.0", p.Version)
 }
 
 func TestParseVersionsTF_MissingSourceAndVersion(t *testing.T) {

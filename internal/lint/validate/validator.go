@@ -48,6 +48,7 @@ const (
 	SetStringType
 	ProviderConstraintStyle
 	EmptyOutputsTF
+	VersionsTFNotSymlink
 )
 
 func (k ErrorKind) String() string {
@@ -92,6 +93,8 @@ func (k ErrorKind) String() string {
 		return "provider constraint style"
 	case EmptyOutputsTF:
 		return "empty outputs.tf"
+	case VersionsTFNotSymlink:
+		return "versions.tf not symlinked to root"
 	default:
 		return "unknown"
 	}
@@ -99,6 +102,23 @@ func (k ErrorKind) String() string {
 
 var snakeCaseRe = regexp.MustCompile(`^[a-z][a-z0-9]*(_[a-z0-9]+)*$`)
 var shaPattern = regexp.MustCompile(`^[0-9a-fA-F]{7,40}$`)
+
+// findModuleRoot walks up from dir to find the topmost ancestor containing .tf files.
+func findModuleRoot(dir string) string {
+	root := dir
+	current := dir
+	for {
+		parent := filepath.Dir(current)
+		if parent == current {
+			break
+		}
+		if hclutils.HasTFFiles(parent) {
+			root = parent
+		}
+		current = parent
+	}
+	return root
+}
 
 // isSHA reports whether ref is a commit SHA (7-40 hex characters).
 func isSHA(ref string) bool {
@@ -787,6 +807,45 @@ func ModuleDir(dir string, opts ...Options) ([]Error, error) {
 				Kind:   EmptyOutputsTF,
 				Detail: "outputs.tf exists but contains no output blocks",
 			})
+		}
+	}
+
+	// Rule: versions-tf-symlink
+	if opt.Config != nil && opt.Config.IsRuleEnabled("versions-tf-symlink", absDir) {
+		root := findModuleRoot(absDir)
+		if absDir != root {
+			// This is a submodule, check that versions.tf is a symlink
+			versionsTFPath := filepath.Join(absDir, "versions.tf")
+			fi, err := os.Lstat(versionsTFPath)
+			if err != nil && !os.IsNotExist(err) {
+				return nil, fmt.Errorf("versions-tf-symlink: lstat %s: %w", versionsTFPath, err)
+			}
+
+			if err == nil {
+				// File exists, check if it's a symlink
+				if fi.Mode()&os.ModeSymlink == 0 {
+					errs = append(errs, Error{
+						File:   absDir,
+						Kind:   VersionsTFNotSymlink,
+						Detail: "versions.tf is not a symlink (expected symlink to root module)",
+					})
+				} else {
+					// It's a symlink, verify it resolves to the root's versions.tf
+					resolved, err := filepath.EvalSymlinks(versionsTFPath)
+					if err != nil {
+						return nil, fmt.Errorf("versions-tf-symlink: eval symlinks %s: %w", versionsTFPath, err)
+					}
+
+					expectedTarget := filepath.Join(root, "versions.tf")
+					if resolved != expectedTarget {
+						errs = append(errs, Error{
+							File:   absDir,
+							Kind:   VersionsTFNotSymlink,
+							Detail: fmt.Sprintf("versions.tf symlink resolves to %s, expected %s", resolved, expectedTarget),
+						})
+					}
+				}
+			}
 		}
 	}
 

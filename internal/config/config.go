@@ -254,6 +254,7 @@ func Default() *Config {
 				"set-string-type":           {Enabled: false},
 				"provider-constraint-style": {Enabled: false},
 				"empty-outputs-tf":          {Enabled: false},
+				"versions-tf-symlink":       {Enabled: false},
 			},
 		},
 	}

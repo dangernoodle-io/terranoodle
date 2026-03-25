@@ -136,22 +136,19 @@ func Save(path string, cfg *Config) error {
 	return nil
 }
 
-// GlobalPath returns the platform-appropriate global config path.
-// Uses os.UserConfigDir() which returns:
-//   - Linux: $XDG_CONFIG_HOME or ~/.config
-//   - macOS: ~/Library/Application Support
-//   - Windows: %AppData%
+// GlobalPath returns the global config path: ~/.config/terranoodle/config.yml
+// Uses a consistent path across all platforms.
 func GlobalPath() (string, error) {
-	dir, err := os.UserConfigDir()
+	home, err := os.UserHomeDir()
 	if err != nil {
-		return "", fmt.Errorf("config: user config dir: %w", err)
+		return "", fmt.Errorf("config: user home dir: %w", err)
 	}
-	return filepath.Join(dir, GlobalDir, GlobalFile), nil
+	return filepath.Join(home, ".config", GlobalDir, GlobalFile), nil
 }
 
 // Discover finds and loads the effective config by:
 // 1. Walking up from startDir to find .terranoodle.yml
-// 2. Loading global config from os.UserConfigDir()/terranoodle/config.yml
+// 2. Loading global config from ~/.config/terranoodle/config.yml
 // 3. Merging: global <- project (project wins)
 //
 // Returns an empty Config (not nil) if no config files are found.

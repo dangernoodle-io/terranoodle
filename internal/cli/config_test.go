@@ -185,3 +185,68 @@ func TestConfigGet_ExcludeDirs(t *testing.T) {
 	err = runConfigGet(configGetCmd, []string{"lint.exclude-dirs"})
 	require.NoError(t, err)
 }
+
+// TestConfigInit_Global creates global config in ~/.config/terranoodle/config.yml.
+func TestConfigInit_Global(t *testing.T) {
+	// Use a temporary home directory
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	// Save flag state
+	oldGlobalFlag := configGlobalFlag
+	t.Cleanup(func() { configGlobalFlag = oldGlobalFlag })
+
+	configGlobalFlag = true
+
+	// Create any working directory to run from
+	tmpDir := t.TempDir()
+	t.Chdir(tmpDir)
+
+	err := runConfigInit(configInitCmd, nil)
+	require.NoError(t, err)
+
+	// Verify global config was created
+	expectedPath := filepath.Join(tmpHome, ".config", "terranoodle", config.GlobalFile)
+	data, err := os.ReadFile(expectedPath)
+	require.NoError(t, err)
+
+	// Verify contents match default config
+	var cfg config.Config
+	err = yaml.Unmarshal(data, &cfg)
+	require.NoError(t, err)
+
+	// Check that default rules are present
+	assert.NotNil(t, cfg.Lint.Rules)
+	assert.True(t, len(cfg.Lint.Rules) > 0)
+	assert.True(t, cfg.Lint.Rules["missing-required"].Enabled)
+}
+
+// TestConfigInit_GlobalAlreadyExists returns error when global config exists.
+func TestConfigInit_GlobalAlreadyExists(t *testing.T) {
+	// Use a temporary home directory
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	// Save flag state
+	oldGlobalFlag := configGlobalFlag
+	t.Cleanup(func() { configGlobalFlag = oldGlobalFlag })
+
+	configGlobalFlag = true
+
+	// Create existing global config
+	configDir := filepath.Join(tmpHome, ".config", "terranoodle")
+	err := os.MkdirAll(configDir, 0o755)
+	require.NoError(t, err)
+
+	configPath := filepath.Join(configDir, config.GlobalFile)
+	err = os.WriteFile(configPath, []byte("lint:\n  rules:\n    test: true\n"), 0o644)
+	require.NoError(t, err)
+
+	// Try to init again
+	tmpDir := t.TempDir()
+	t.Chdir(tmpDir)
+
+	err = runConfigInit(configInitCmd, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "already exists")
+}

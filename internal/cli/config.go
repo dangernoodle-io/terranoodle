@@ -47,6 +47,7 @@ var configInitCmd = &cobra.Command{
 
 func init() {
 	configSetCmd.Flags().BoolVar(&configGlobalFlag, "global", false, "Set in global config")
+	configInitCmd.Flags().BoolVar(&configGlobalFlag, "global", false, "Create global config")
 
 	configCmd.AddCommand(configGetCmd)
 	configCmd.AddCommand(configSetCmd)
@@ -131,21 +132,33 @@ func runConfigList(cmd *cobra.Command, args []string) error {
 }
 
 func runConfigInit(cmd *cobra.Command, args []string) error {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return fmt.Errorf("config init: %w", err)
+	var path string
+	var label string
+
+	if configGlobalFlag {
+		var err error
+		path, err = config.GlobalPath()
+		if err != nil {
+			return err
+		}
+		label = path
+	} else {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return fmt.Errorf("config init: %w", err)
+		}
+		path = filepath.Join(cwd, config.ProjectFile)
+		label = config.ProjectFile
 	}
 
-	path := filepath.Join(cwd, config.ProjectFile)
-
 	if _, err := os.Stat(path); err == nil {
-		return fmt.Errorf("config init: %s already exists", config.ProjectFile)
+		return fmt.Errorf("config init: %s already exists", label)
 	}
 
 	if err := config.Save(path, config.Default()); err != nil {
 		return err
 	}
 
-	output.Success("Created %s", config.ProjectFile)
+	output.Success("Created %s", label)
 	return nil
 }

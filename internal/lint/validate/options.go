@@ -19,6 +19,7 @@ var ruleNames = map[ErrorKind]string{
 	NonSnakeCase:           "non-snake-case",
 	UnusedVariable:         "unused-variable",
 	OptionalWithoutDefault: "optional-without-default",
+	MissingIncludeExpose:   "missing-include-expose",
 }
 
 // filterErrors removes errors for disabled rules.
@@ -93,4 +94,30 @@ func getEnforceOption(opts Options, ruleName string) string { //nolint:unparam /
 		return s
 	}
 	return ""
+}
+
+// getExcludePatterns reads the "exclude" option from a rule's config.
+func getExcludePatterns(opts Options, ruleName string) []string {
+	if opts.Config == nil {
+		return nil
+	}
+	rule, ok := opts.Config.Rules[ruleName]
+	if !ok {
+		return nil
+	}
+	raw, ok := rule.Options["exclude"]
+	if !ok {
+		return nil
+	}
+	items, ok := raw.([]interface{})
+	if !ok {
+		return nil
+	}
+	patterns := make([]string, 0, len(items))
+	for _, item := range items {
+		if s, ok := item.(string); ok {
+			patterns = append(patterns, s)
+		}
+	}
+	return patterns
 }

@@ -655,7 +655,7 @@ func TestDefault(t *testing.T) {
 	cfg := Default()
 
 	assert.NotNil(t, cfg)
-	assert.Equal(t, 9, len(cfg.Lint.Rules))
+	assert.Equal(t, 10, len(cfg.Lint.Rules))
 	assert.Equal(t, true, cfg.Lint.Rules["missing-required"].Enabled)
 	assert.Equal(t, true, cfg.Lint.Rules["extra-input"].Enabled)
 	assert.Equal(t, true, cfg.Lint.Rules["type-mismatch"].Enabled)
@@ -665,4 +665,5 @@ func TestDefault(t *testing.T) {
 	assert.Equal(t, false, cfg.Lint.Rules["non-snake-case"].Enabled)
 	assert.Equal(t, false, cfg.Lint.Rules["unused-variable"].Enabled)
 	assert.Equal(t, false, cfg.Lint.Rules["optional-without-default"].Enabled)
+	assert.Equal(t, false, cfg.Lint.Rules["missing-include-expose"].Enabled)
 }

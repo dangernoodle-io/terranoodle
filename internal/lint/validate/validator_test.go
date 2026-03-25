@@ -337,6 +337,7 @@ func TestErrorKind_String(t *testing.T) {
 		{NonSnakeCase, "non-snake-case name"},
 		{UnusedVariable, "UnusedVariable"},
 		{OptionalWithoutDefault, "OptionalWithoutDefault"},
+		{MissingIncludeExpose, "MissingIncludeExpose"},
 		{ErrorKind(999), "unknown"},
 	}
 
@@ -689,4 +690,48 @@ func TestCheckSourceProtocol_EnforceAny(t *testing.T) {
 	opts := Options{Config: cfg}
 	assert.Empty(t, checkSourceProtocol("git::git@github.com:acme-corp/modules.git//vpc", "/test/f.hcl", opts))
 	assert.Empty(t, checkSourceProtocol("git::https://github.com/acme-corp/modules.git//vpc", "/test/f.hcl", opts))
+}
+
+func TestFile_MissingIncludeExpose(t *testing.T) {
+	cfg := &config.LintConfig{Rules: map[string]config.RuleConfig{
+		"missing-include-expose": {Enabled: true},
+	}}
+	errs, err := File(testdataPath("missing-include-expose"), Options{Config: cfg})
+	require.NoError(t, err)
+	require.Len(t, errs, 1)
+	assert.Equal(t, MissingIncludeExpose, errs[0].Kind)
+	assert.Equal(t, "root", errs[0].Variable)
+}
+
+func TestFile_MissingIncludeExpose_HasExpose(t *testing.T) {
+	cfg := &config.LintConfig{Rules: map[string]config.RuleConfig{
+		"missing-include-expose": {Enabled: true},
+	}}
+	errs, err := File(testdataPath("include-expose-inputs"), Options{Config: cfg})
+	require.NoError(t, err)
+	for _, e := range errs {
+		assert.NotEqual(t, MissingIncludeExpose, e.Kind)
+	}
+}
+
+func TestFile_MissingIncludeExpose_Excluded(t *testing.T) {
+	cfg := &config.LintConfig{Rules: map[string]config.RuleConfig{
+		"missing-include-expose": {Enabled: true, Options: map[string]interface{}{
+			"exclude": []interface{}{"root"},
+		}},
+	}}
+	errs, err := File(testdataPath("missing-include-expose"), Options{Config: cfg})
+	require.NoError(t, err)
+	for _, e := range errs {
+		assert.NotEqual(t, MissingIncludeExpose, e.Kind)
+	}
+}
+
+func TestFile_MissingIncludeExpose_DisabledByDefault(t *testing.T) {
+	cfg := config.Default()
+	errs, err := File(testdataPath("missing-include-expose"), Options{Config: &cfg.Lint})
+	require.NoError(t, err)
+	for _, e := range errs {
+		assert.NotEqual(t, MissingIncludeExpose, e.Kind)
+	}
 }

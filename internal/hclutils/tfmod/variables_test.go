@@ -220,5 +220,30 @@ func TestParseVariables_ComplexVariable(t *testing.T) {
 	require.Len(t, result, 1)
 	assert.Equal(t, "acme_config", result[0].Name)
 	assert.True(t, result[0].HasDefault)
+	assert.True(t, result[0].HasDescription)
 	assert.NotNil(t, result[0].Type)
+}
+
+func TestParseVariables_HasDescription(t *testing.T) {
+	dir := t.TempDir()
+	writeFile := func(t *testing.T, path, content string) {
+		require.Nil(t, os.WriteFile(path, []byte(content), 0o644))
+	}
+	writeFile(t, filepath.Join(dir, "variables.tf"), `
+variable "with_desc" {
+  description = "has a description"
+  type        = string
+}
+
+variable "without_desc" {
+  type = string
+}
+`)
+	result, err := ParseVariables(dir)
+	require.NoError(t, err)
+	require.Len(t, result, 2)
+	assert.Equal(t, "with_desc", result[0].Name)
+	assert.True(t, result[0].HasDescription)
+	assert.Equal(t, "without_desc", result[1].Name)
+	assert.False(t, result[1].HasDescription)
 }

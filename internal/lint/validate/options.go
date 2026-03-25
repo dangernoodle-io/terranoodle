@@ -10,11 +10,13 @@ type Options struct {
 
 // ruleNames maps ErrorKind to config rule names.
 var ruleNames = map[ErrorKind]string{
-	MissingRequired: "missing-required",
-	ExtraInput:      "extra-input",
-	TypeMismatch:    "type-mismatch",
-	SourceRefSemver: "source-ref-semver",
-	SourceProtocol:  "source-protocol",
+	MissingRequired:    "missing-required",
+	ExtraInput:         "extra-input",
+	TypeMismatch:       "type-mismatch",
+	SourceRefSemver:    "source-ref-semver",
+	SourceProtocol:     "source-protocol",
+	MissingDescription: "missing-description",
+	NonSnakeCase:       "non-snake-case",
 }
 
 // filterErrors removes errors for disabled rules.

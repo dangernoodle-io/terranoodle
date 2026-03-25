@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -32,6 +33,8 @@ const (
 	TypeMismatch // Phase 5
 	SourceRefSemver
 	SourceProtocol
+	MissingDescription
+	NonSnakeCase
 )
 
 func (k ErrorKind) String() string {
@@ -46,10 +49,16 @@ func (k ErrorKind) String() string {
 		return "non-semver source ref"
 	case SourceProtocol:
 		return "disallowed source protocol"
+	case MissingDescription:
+		return "missing description"
+	case NonSnakeCase:
+		return "non-snake-case name"
 	default:
 		return "unknown"
 	}
 }
+
+var snakeCaseRe = regexp.MustCompile(`^[a-z][a-z0-9]*(_[a-z0-9]+)*$`)
 
 // Error represents a single validation finding.
 type Error struct {
@@ -330,7 +339,7 @@ func resolveDepExemptions(cfg *hclutils.TerragruntConfig) map[string]bool {
 		}
 
 		for _, o := range outputs {
-			exempt[o] = true
+			exempt[o.Name] = true
 		}
 	}
 
@@ -387,6 +396,71 @@ func TerraformDir(dir string, opts ...Options) ([]Error, error) {
 	}
 
 	return filterErrors(applyAllowList(allErrors, opt), opt), nil
+}
+
+// ModuleDir validates variable and output declarations in a Terraform module directory.
+func ModuleDir(dir string, opts ...Options) ([]Error, error) {
+	absDir, err := filepath.Abs(dir)
+	if err != nil {
+		return nil, fmt.Errorf("resolving path %s: %w", dir, err)
+	}
+
+	var opt Options
+	if len(opts) > 0 {
+		opt = opts[0]
+	}
+
+	variables, err := tfmod.ParseVariables(absDir)
+	if err != nil {
+		return nil, err
+	}
+
+	outputs, err := tfmod.ParseOutputs(absDir)
+	if err != nil {
+		return nil, err
+	}
+
+	var errs []Error
+
+	for _, v := range variables {
+		if !v.HasDescription {
+			errs = append(errs, Error{
+				File:     absDir,
+				Variable: v.Name,
+				Kind:     MissingDescription,
+				Detail:   fmt.Sprintf("variable %q has no description", v.Name),
+			})
+		}
+		if !snakeCaseRe.MatchString(v.Name) {
+			errs = append(errs, Error{
+				File:     absDir,
+				Variable: v.Name,
+				Kind:     NonSnakeCase,
+				Detail:   fmt.Sprintf("variable name %q is not snake_case", v.Name),
+			})
+		}
+	}
+
+	for _, o := range outputs {
+		if !o.HasDescription {
+			errs = append(errs, Error{
+				File:     absDir,
+				Variable: o.Name,
+				Kind:     MissingDescription,
+				Detail:   fmt.Sprintf("output %q has no description", o.Name),
+			})
+		}
+		if !snakeCaseRe.MatchString(o.Name) {
+			errs = append(errs, Error{
+				File:     absDir,
+				Variable: o.Name,
+				Kind:     NonSnakeCase,
+				Detail:   fmt.Sprintf("output name %q is not snake_case", o.Name),
+			})
+		}
+	}
+
+	return filterErrors(errs, opt), nil
 }
 
 func check(file string, inputs map[string]hcl.Expression, variables []tfmod.Variable, depOutputKeys map[string]bool, envVarKeys map[string]bool, includeInputKeys map[string]bool, tfVarKeys map[string]bool, evalCtx *hcl.EvalContext) []Error {

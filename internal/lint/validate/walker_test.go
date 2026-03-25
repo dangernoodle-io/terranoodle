@@ -125,11 +125,13 @@ func TestWalkDir_MultipleScenarios(t *testing.T) {
 	require.NoError(t, os.Mkdir(moduleDir, 0o755))
 	varsFile := filepath.Join(moduleDir, "variables.tf")
 	require.NoError(t, os.WriteFile(varsFile, []byte(`variable "project_id" {
-  type = string
+  description = "Project ID"
+  type        = string
 }
 
 variable "environment" {
-  type = string
+  description = "Environment name"
+  type        = string
 }
 `), 0o644))
 
@@ -175,7 +177,8 @@ func TestWalkDir_ExcludeDirs(t *testing.T) {
 	require.NoError(t, os.Mkdir(moduleDir, 0o755))
 	varsFile := filepath.Join(moduleDir, "variables.tf")
 	require.NoError(t, os.WriteFile(varsFile, []byte(`variable "region" {
-  type = string
+  description = "AWS region"
+  type        = string
 }
 `), 0o644))
 

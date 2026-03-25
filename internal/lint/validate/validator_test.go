@@ -333,6 +333,8 @@ func TestErrorKind_String(t *testing.T) {
 		{TypeMismatch, "type mismatch"},
 		{SourceRefSemver, "non-semver source ref"},
 		{SourceProtocol, "disallowed source protocol"},
+		{MissingDescription, "missing description"},
+		{NonSnakeCase, "non-snake-case name"},
 		{ErrorKind(999), "unknown"},
 	}
 

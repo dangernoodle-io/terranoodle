@@ -182,17 +182,15 @@ func Discover(startDir string) (*Config, error) {
 		}
 	}
 
-	// Merge: global <- project
-	switch {
-	case globalCfg != nil && projectCfg != nil:
-		return Merge(globalCfg, projectCfg), nil
-	case projectCfg != nil:
-		return projectCfg, nil
-	case globalCfg != nil:
-		return globalCfg, nil
-	default:
-		return &Config{}, nil
+	// Merge: defaults <- global <- project
+	result := Default()
+	if globalCfg != nil {
+		result = Merge(result, globalCfg)
 	}
+	if projectCfg != nil {
+		result = Merge(result, projectCfg)
+	}
+	return result, nil
 }
 
 // Merge returns a new Config with b's values overriding a's.
@@ -228,11 +226,13 @@ func Default() *Config {
 	return &Config{
 		Lint: LintConfig{
 			Rules: map[string]RuleConfig{
-				"missing-required":  {Enabled: true},
-				"extra-input":       {Enabled: true},
-				"type-mismatch":     {Enabled: true},
-				"source-ref-semver": {Enabled: true},
-				"source-protocol":   {Enabled: false},
+				"missing-required":    {Enabled: true},
+				"extra-input":         {Enabled: true},
+				"type-mismatch":       {Enabled: true},
+				"source-ref-semver":   {Enabled: true},
+				"source-protocol":     {Enabled: false},
+				"missing-description": {Enabled: false},
+				"non-snake-case":      {Enabled: false},
 			},
 		},
 	}

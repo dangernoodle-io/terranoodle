@@ -317,7 +317,7 @@ func TestDiscover_NoConfigFound(t *testing.T) {
 	cfg, err := Discover(tmpDir)
 	require.NoError(t, err)
 	assert.NotNil(t, cfg)
-	assert.Empty(t, cfg.Lint.Rules) // Should be empty Config
+	assert.Equal(t, Default().Lint.Rules, cfg.Lint.Rules) // Should have default rules
 }
 
 // Test Discover - walk-up behavior.
@@ -655,10 +655,12 @@ func TestDefault(t *testing.T) {
 	cfg := Default()
 
 	assert.NotNil(t, cfg)
-	assert.Equal(t, 5, len(cfg.Lint.Rules))
+	assert.Equal(t, 7, len(cfg.Lint.Rules))
 	assert.Equal(t, true, cfg.Lint.Rules["missing-required"].Enabled)
 	assert.Equal(t, true, cfg.Lint.Rules["extra-input"].Enabled)
 	assert.Equal(t, true, cfg.Lint.Rules["type-mismatch"].Enabled)
 	assert.Equal(t, true, cfg.Lint.Rules["source-ref-semver"].Enabled)
 	assert.Equal(t, false, cfg.Lint.Rules["source-protocol"].Enabled)
+	assert.Equal(t, false, cfg.Lint.Rules["missing-description"].Enabled)
+	assert.Equal(t, false, cfg.Lint.Rules["non-snake-case"].Enabled)
 }

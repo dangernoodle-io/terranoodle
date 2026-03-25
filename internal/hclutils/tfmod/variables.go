@@ -11,9 +11,10 @@ import (
 
 // Variable represents a declared terraform variable.
 type Variable struct {
-	Name       string
-	HasDefault bool
-	Type       hcl.Expression // raw type expression, nil if unspecified (Phase 5)
+	Name           string
+	HasDefault     bool
+	HasDescription bool
+	Type           hcl.Expression // raw type expression, nil if unspecified (Phase 5)
 }
 
 // ParseVariables reads all .tf files in a module directory and extracts
@@ -89,6 +90,9 @@ func extractVariables(body hcl.Body) ([]Variable, error) {
 
 		if _, ok := varContent.Attributes["default"]; ok {
 			v.HasDefault = true
+		}
+		if _, ok := varContent.Attributes["description"]; ok {
+			v.HasDescription = true
 		}
 		if attr, ok := varContent.Attributes["type"]; ok {
 			v.Type = attr.Expr

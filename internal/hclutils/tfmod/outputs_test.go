@@ -28,7 +28,7 @@ func TestParseOutputs_SingleOutput(t *testing.T) {
 
 	require.Nil(t, err)
 	require.Len(t, result, 1)
-	assert.Equal(t, "vpc_id", result[0])
+	assert.Equal(t, "vpc_id", result[0].Name)
 }
 
 func TestParseOutputs_MultipleOutputsInOneFile(t *testing.T) {
@@ -51,9 +51,13 @@ output "security_group_id" {
 
 	require.Nil(t, err)
 	require.Len(t, result, 3)
-	assert.Contains(t, result, "vpc_id")
-	assert.Contains(t, result, "subnet_ids")
-	assert.Contains(t, result, "security_group_id")
+	names := make(map[string]bool)
+	for _, o := range result {
+		names[o.Name] = true
+	}
+	assert.True(t, names["vpc_id"])
+	assert.True(t, names["subnet_ids"])
+	assert.True(t, names["security_group_id"])
 }
 
 func TestParseOutputs_MultipleFiles(t *testing.T) {
@@ -77,8 +81,12 @@ func TestParseOutputs_MultipleFiles(t *testing.T) {
 
 	require.Nil(t, err)
 	require.Len(t, result, 2)
-	assert.Contains(t, result, "acme_vpc_id")
-	assert.Contains(t, result, "acme_instance_id")
+	names := make(map[string]bool)
+	for _, o := range result {
+		names[o.Name] = true
+	}
+	assert.True(t, names["acme_vpc_id"])
+	assert.True(t, names["acme_instance_id"])
 }
 
 func TestParseOutputs_NonTfFilesIgnored(t *testing.T) {
@@ -98,7 +106,7 @@ func TestParseOutputs_NonTfFilesIgnored(t *testing.T) {
 
 	require.Nil(t, err)
 	require.Len(t, result, 1)
-	assert.Equal(t, "acme_id", result[0])
+	assert.Equal(t, "acme_id", result[0].Name)
 }
 
 func TestParseOutputs_DirectoriesIgnored(t *testing.T) {
@@ -117,7 +125,7 @@ func TestParseOutputs_DirectoriesIgnored(t *testing.T) {
 
 	require.Nil(t, err)
 	require.Len(t, result, 1)
-	assert.Equal(t, "acme_output", result[0])
+	assert.Equal(t, "acme_output", result[0].Name)
 }
 
 func TestParseOutputs_NonexistentDir(t *testing.T) {
@@ -144,7 +152,7 @@ func TestParseOutputs_ComplexOutput(t *testing.T) {
 
 	require.Nil(t, err)
 	require.Len(t, result, 1)
-	assert.Equal(t, "acme_cluster_info", result[0])
+	assert.Equal(t, "acme_cluster_info", result[0].Name)
 }
 
 func TestParseOutputs_MixedContent(t *testing.T) {
@@ -170,6 +178,34 @@ output "acme_environment" {
 
 	require.Nil(t, err)
 	require.Len(t, result, 2)
-	assert.Contains(t, result, "acme_region")
-	assert.Contains(t, result, "acme_environment")
+	names := make(map[string]bool)
+	for _, o := range result {
+		names[o.Name] = true
+	}
+	assert.True(t, names["acme_region"])
+	assert.True(t, names["acme_environment"])
+}
+
+func TestParseOutputs_HasDescription(t *testing.T) {
+	dir := t.TempDir()
+	writeFile := func(t *testing.T, dir, filename, content string) {
+		require.Nil(t, os.WriteFile(filepath.Join(dir, filename), []byte(content), 0o644))
+	}
+	writeFile(t, dir, "outputs.tf", `
+output "with_desc" {
+  value       = "test"
+  description = "has a description"
+}
+
+output "without_desc" {
+  value = "test"
+}
+`)
+	result, err := ParseOutputs(dir)
+	require.NoError(t, err)
+	require.Len(t, result, 2)
+	assert.Equal(t, "with_desc", result[0].Name)
+	assert.True(t, result[0].HasDescription)
+	assert.Equal(t, "without_desc", result[1].Name)
+	assert.False(t, result[1].HasDescription)
 }

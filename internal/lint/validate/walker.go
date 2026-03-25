@@ -46,6 +46,12 @@ func Dir(dir string, opts ...Options) ([]Error, error) {
 			return nil, err
 		}
 		allErrors = append(allErrors, errs...)
+
+		modErrs, modErr := ModuleDir(dir, opt)
+		if modErr != nil {
+			return nil, modErr
+		}
+		allErrors = append(allErrors, modErrs...)
 	}
 
 	return allErrors, nil
@@ -113,7 +119,15 @@ func validateFile(path, name string, visitedDirs map[string]bool, opt Options) (
 		if !visitedDirs[tfDir] {
 			// Mark the dir so we don't validate it again for subsequent .tf files.
 			visitedDirs[tfDir] = true
-			return TerraformDir(tfDir, opt)
+			errs, err := TerraformDir(tfDir, opt)
+			if err != nil {
+				return nil, err
+			}
+			modErrs, modErr := ModuleDir(tfDir, opt)
+			if modErr != nil {
+				return nil, modErr
+			}
+			return append(errs, modErrs...), nil
 		}
 	}
 

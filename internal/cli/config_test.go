@@ -210,15 +210,17 @@ func TestConfigInit_Global(t *testing.T) {
 	data, err := os.ReadFile(expectedPath)
 	require.NoError(t, err)
 
-	// Verify contents match default config
-	var cfg config.Config
-	err = yaml.Unmarshal(data, &cfg)
+	// Verify contents are GlobalConfig with profiles.default
+	var globalCfg config.GlobalConfig
+	err = yaml.Unmarshal(data, &globalCfg)
 	require.NoError(t, err)
 
-	// Check that default rules are present
-	assert.NotNil(t, cfg.Lint.Rules)
-	assert.True(t, len(cfg.Lint.Rules) > 0)
-	assert.True(t, cfg.Lint.Rules["missing-required"].Enabled)
+	// Check that default profile exists with rules
+	assert.NotNil(t, globalCfg.Profiles)
+	assert.NotNil(t, globalCfg.Profiles["default"])
+	assert.NotNil(t, globalCfg.Profiles["default"].Lint.Rules)
+	assert.True(t, len(globalCfg.Profiles["default"].Lint.Rules) > 0)
+	assert.True(t, globalCfg.Profiles["default"].Lint.Rules["missing-required"].Enabled)
 }
 
 // TestConfigInit_GlobalAlreadyExists returns error when global config exists.
@@ -249,4 +251,216 @@ func TestConfigInit_GlobalAlreadyExists(t *testing.T) {
 	err = runConfigInit(configInitCmd, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "already exists")
+}
+
+// TestConfigSet_ProfileRule sets a lint rule on a named profile.
+func TestConfigSet_ProfileRule(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	oldProfileFlag := configProfileFlag
+	oldGlobalFlag := configGlobalFlag
+	t.Cleanup(func() {
+		configProfileFlag = oldProfileFlag
+		configGlobalFlag = oldGlobalFlag
+	})
+
+	configProfileFlag = "strict"
+	configGlobalFlag = false // --profile implies --global internally
+
+	tmpDir := t.TempDir()
+	t.Chdir(tmpDir)
+
+	err := runConfigSet(configSetCmd, []string{"lint.rules.missing-description", "true"})
+	require.NoError(t, err)
+
+	// Verify global config was written with the profile
+	globalPath := filepath.Join(tmpHome, ".config", "terranoodle", config.GlobalFile)
+	data, err := os.ReadFile(globalPath)
+	require.NoError(t, err)
+
+	var globalCfg config.GlobalConfig
+	err = yaml.Unmarshal(data, &globalCfg)
+	require.NoError(t, err)
+
+	assert.NotNil(t, globalCfg.Profiles["strict"])
+	assert.True(t, globalCfg.Profiles["strict"].Lint.Rules["missing-description"].Enabled)
+}
+
+// TestConfigSet_ProfileBind sets bind paths on a profile.
+func TestConfigSet_ProfileBind(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	oldProfileFlag := configProfileFlag
+	oldGlobalFlag := configGlobalFlag
+	t.Cleanup(func() {
+		configProfileFlag = oldProfileFlag
+		configGlobalFlag = oldGlobalFlag
+	})
+
+	configProfileFlag = "strict"
+	configGlobalFlag = false
+
+	tmpDir := t.TempDir()
+	t.Chdir(tmpDir)
+
+	err := runConfigSet(configSetCmd, []string{"bind", "/Users/test/infra,/Users/test/prod"})
+	require.NoError(t, err)
+
+	// Verify bind paths were set
+	globalPath := filepath.Join(tmpHome, ".config", "terranoodle", config.GlobalFile)
+	data, err := os.ReadFile(globalPath)
+	require.NoError(t, err)
+
+	var globalCfg config.GlobalConfig
+	err = yaml.Unmarshal(data, &globalCfg)
+	require.NoError(t, err)
+
+	assert.NotNil(t, globalCfg.Profiles["strict"])
+	assert.Equal(t, []string{"/Users/test/infra", "/Users/test/prod"}, globalCfg.Profiles["strict"].Bind)
+}
+
+// TestConfigGet_Profile reads from a specific profile.
+func TestConfigGet_Profile(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	oldProfileFlag := configProfileFlag
+	t.Cleanup(func() { configProfileFlag = oldProfileFlag })
+
+	// Create a global config with a "strict" profile
+	configDir := filepath.Join(tmpHome, ".config", "terranoodle")
+	err := os.MkdirAll(configDir, 0o755)
+	require.NoError(t, err)
+
+	globalCfg := &config.GlobalConfig{
+		Profiles: map[string]config.Profile{
+			"strict": {
+				Lint: config.LintConfig{
+					Rules: map[string]config.RuleConfig{
+						"missing-description": {Enabled: true},
+					},
+				},
+			},
+		},
+	}
+
+	configPath := filepath.Join(configDir, config.GlobalFile)
+	data, err := yaml.Marshal(globalCfg)
+	require.NoError(t, err)
+	err = os.WriteFile(configPath, data, 0o644)
+	require.NoError(t, err)
+
+	configProfileFlag = "strict"
+	tmpDir := t.TempDir()
+	t.Chdir(tmpDir)
+
+	err = runConfigGet(configGetCmd, []string{"lint.rules.missing-description"})
+	require.NoError(t, err)
+}
+
+// TestConfigSet_GlobalDefaultProfile sets a rule on the default profile via --global.
+func TestConfigSet_GlobalDefaultProfile(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	oldGlobalFlag := configGlobalFlag
+	oldProfileFlag := configProfileFlag
+	t.Cleanup(func() {
+		configGlobalFlag = oldGlobalFlag
+		configProfileFlag = oldProfileFlag
+	})
+
+	configGlobalFlag = true
+	configProfileFlag = ""
+
+	tmpDir := t.TempDir()
+	t.Chdir(tmpDir)
+
+	err := runConfigSet(configSetCmd, []string{"lint.rules.missing-required", "false"})
+	require.NoError(t, err)
+
+	// Verify default profile was updated
+	globalPath := filepath.Join(tmpHome, ".config", "terranoodle", config.GlobalFile)
+	data, err := os.ReadFile(globalPath)
+	require.NoError(t, err)
+
+	var globalCfg config.GlobalConfig
+	err = yaml.Unmarshal(data, &globalCfg)
+	require.NoError(t, err)
+
+	assert.NotNil(t, globalCfg.Profiles["default"])
+	assert.False(t, globalCfg.Profiles["default"].Lint.Rules["missing-required"].Enabled)
+}
+
+// TestConfigInit_GlobalScaffoldsProfiles verifies init creates profiles structure.
+func TestConfigInit_GlobalScaffoldsProfiles(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	oldGlobalFlag := configGlobalFlag
+	t.Cleanup(func() { configGlobalFlag = oldGlobalFlag })
+
+	configGlobalFlag = true
+
+	tmpDir := t.TempDir()
+	t.Chdir(tmpDir)
+
+	err := runConfigInit(configInitCmd, nil)
+	require.NoError(t, err)
+
+	// Verify profiles structure exists
+	globalPath := filepath.Join(tmpHome, ".config", "terranoodle", config.GlobalFile)
+	data, err := os.ReadFile(globalPath)
+	require.NoError(t, err)
+
+	var globalCfg config.GlobalConfig
+	err = yaml.Unmarshal(data, &globalCfg)
+	require.NoError(t, err)
+
+	assert.NotNil(t, globalCfg.Profiles)
+	assert.NotNil(t, globalCfg.Profiles["default"])
+	assert.NotNil(t, globalCfg.Profiles["default"].Lint.Rules)
+	assert.True(t, len(globalCfg.Profiles["default"].Lint.Rules) > 0)
+}
+
+// TestConfigGet_ProfileNotFound returns error when profile doesn't exist.
+func TestConfigGet_ProfileNotFound(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	oldProfileFlag := configProfileFlag
+	t.Cleanup(func() { configProfileFlag = oldProfileFlag })
+
+	// Create a global config with only default profile
+	configDir := filepath.Join(tmpHome, ".config", "terranoodle")
+	err := os.MkdirAll(configDir, 0o755)
+	require.NoError(t, err)
+
+	globalCfg := &config.GlobalConfig{
+		Profiles: map[string]config.Profile{
+			"default": {
+				Lint: config.LintConfig{
+					Rules: map[string]config.RuleConfig{
+						"test-rule": {Enabled: true},
+					},
+				},
+			},
+		},
+	}
+
+	configPath := filepath.Join(configDir, config.GlobalFile)
+	data, err := yaml.Marshal(globalCfg)
+	require.NoError(t, err)
+	err = os.WriteFile(configPath, data, 0o644)
+	require.NoError(t, err)
+
+	configProfileFlag = "nonexistent"
+	tmpDir := t.TempDir()
+	t.Chdir(tmpDir)
+
+	err = runConfigGet(configGetCmd, []string{"lint.rules.test-rule"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
 }

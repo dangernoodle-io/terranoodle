@@ -236,6 +236,8 @@ func Default() *Config {
 				"unused-variable":          {Enabled: false},
 				"optional-without-default": {Enabled: false},
 				"missing-include-expose":   {Enabled: false},
+				"allowed-filenames":        {Enabled: false},
+				"versions-tf":              {Enabled: false},
 			},
 		},
 	}

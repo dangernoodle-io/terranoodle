@@ -221,6 +221,8 @@ inputs = {}
 			"type-mismatch":            {Enabled: true},
 			"unused-variable":          {Enabled: false},
 			"optional-without-default": {Enabled: false},
+			"allowed-filenames":        {Enabled: false},
+			"versions-tf":              {Enabled: false},
 		},
 	}
 	opts := Options{Config: cfg}

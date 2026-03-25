@@ -20,6 +20,12 @@ var ruleNames = map[ErrorKind]string{
 	UnusedVariable:         "unused-variable",
 	OptionalWithoutDefault: "optional-without-default",
 	MissingIncludeExpose:   "missing-include-expose",
+	DisallowedFilename:     "allowed-filenames",
+	MissingVersionsTF:      "versions-tf",
+	MissingTerraformBlock:  "versions-tf",
+	MissingProviderSource:  "versions-tf",
+	MissingProviderVersion: "versions-tf",
+	DuplicateProvider:      "versions-tf",
 }
 
 // filterErrors removes errors for disabled rules.
@@ -51,34 +57,8 @@ func isExcludedDir(name string, opts Options) bool {
 	return false
 }
 
-// getAllowPatterns reads the "allow" option from a rule's config.
-func getAllowPatterns(opts Options, ruleName string) []string { //nolint:unparam // ruleName is generic for future rules
-	if opts.Config == nil {
-		return nil
-	}
-	rule, ok := opts.Config.Rules[ruleName]
-	if !ok {
-		return nil
-	}
-	raw, ok := rule.Options["allow"]
-	if !ok {
-		return nil
-	}
-	items, ok := raw.([]interface{})
-	if !ok {
-		return nil
-	}
-	patterns := make([]string, 0, len(items))
-	for _, item := range items {
-		if s, ok := item.(string); ok {
-			patterns = append(patterns, s)
-		}
-	}
-	return patterns
-}
-
-// getEnforceOption reads the "enforce" option from a rule's config.
-func getEnforceOption(opts Options, ruleName string) string { //nolint:unparam // ruleName is generic for future rules
+// getStringOption reads a string option from a rule's config.
+func getStringOption(opts Options, ruleName, key string) string {
 	if opts.Config == nil {
 		return ""
 	}
@@ -86,7 +66,7 @@ func getEnforceOption(opts Options, ruleName string) string { //nolint:unparam /
 	if !ok {
 		return ""
 	}
-	raw, ok := rule.Options["enforce"]
+	raw, ok := rule.Options[key]
 	if !ok {
 		return ""
 	}
@@ -96,8 +76,13 @@ func getEnforceOption(opts Options, ruleName string) string { //nolint:unparam /
 	return ""
 }
 
-// getExcludePatterns reads the "exclude" option from a rule's config.
-func getExcludePatterns(opts Options, ruleName string) []string {
+// getEnforceOption reads the "enforce" option from a rule's config.
+func getEnforceOption(opts Options, ruleName string) string {
+	return getStringOption(opts, ruleName, "enforce")
+}
+
+// getListOption reads a string list option from a rule's config.
+func getListOption(opts Options, ruleName, key string) []string {
 	if opts.Config == nil {
 		return nil
 	}
@@ -105,7 +90,7 @@ func getExcludePatterns(opts Options, ruleName string) []string {
 	if !ok {
 		return nil
 	}
-	raw, ok := rule.Options["exclude"]
+	raw, ok := rule.Options[key]
 	if !ok {
 		return nil
 	}
@@ -120,4 +105,14 @@ func getExcludePatterns(opts Options, ruleName string) []string {
 		}
 	}
 	return patterns
+}
+
+// getAllowPatterns reads the "allow" option from a rule's config.
+func getAllowPatterns(opts Options, ruleName string) []string {
+	return getListOption(opts, ruleName, "allow")
+}
+
+// getExcludePatterns reads the "exclude" option from a rule's config.
+func getExcludePatterns(opts Options, ruleName string) []string {
+	return getListOption(opts, ruleName, "exclude")
 }

@@ -38,6 +38,12 @@ const (
 	UnusedVariable
 	OptionalWithoutDefault
 	MissingIncludeExpose
+	DisallowedFilename
+	MissingVersionsTF
+	MissingTerraformBlock
+	MissingProviderSource
+	MissingProviderVersion
+	DuplicateProvider
 )
 
 func (k ErrorKind) String() string {
@@ -62,6 +68,18 @@ func (k ErrorKind) String() string {
 		return "OptionalWithoutDefault"
 	case MissingIncludeExpose:
 		return "MissingIncludeExpose"
+	case DisallowedFilename:
+		return "disallowed filename"
+	case MissingVersionsTF:
+		return "missing versions.tf"
+	case MissingTerraformBlock:
+		return "missing terraform block"
+	case MissingProviderSource:
+		return "missing provider source"
+	case MissingProviderVersion:
+		return "missing provider version"
+	case DuplicateProvider:
+		return "duplicate provider"
 	default:
 		return "unknown"
 	}
@@ -530,6 +548,105 @@ func ModuleDir(dir string, opts ...Options) ([]Error, error) {
 					Kind:     OptionalWithoutDefault,
 					Detail:   fmt.Sprintf("variable %q has optional() attribute without a default value", v.Name),
 				})
+			}
+		}
+	}
+
+	// Rule: allowed-filenames — guard behind rule check
+	if opt.Config != nil && opt.Config.IsRuleEnabled("allowed-filenames", absDir) {
+		tfFiles, fileErr := tfmod.ListTFFiles(absDir)
+		if fileErr != nil {
+			return nil, fileErr
+		}
+
+		// Build allowed set from preset
+		preset := getStringOption(opt, "allowed-filenames", "preset")
+		allowed := make(map[string]bool)
+
+		// Default preset files
+		for _, f := range []string{"main.tf", "variables.tf", "outputs.tf", "versions.tf"} {
+			allowed[f] = true
+		}
+
+		// Extended preset adds more
+		if preset == "extended" {
+			for _, f := range []string{"providers.tf", "locals.tf", "data.tf", "terraform.tf"} {
+				allowed[f] = true
+			}
+		}
+
+		// Additional user-specified files
+		for _, f := range getListOption(opt, "allowed-filenames", "additional") {
+			allowed[f] = true
+		}
+
+		// If versions-tf rule is also enabled, auto-include versions.tf
+		if opt.Config.IsRuleEnabled("versions-tf", absDir) {
+			allowed["versions.tf"] = true
+		}
+
+		for _, f := range tfFiles {
+			if !allowed[f] {
+				errs = append(errs, Error{
+					File:     absDir,
+					Variable: f,
+					Kind:     DisallowedFilename,
+					Detail:   fmt.Sprintf("file %q is not in the allowed filenames list", f),
+				})
+			}
+		}
+	}
+
+	// Rule: versions-tf — guard behind rule check
+	if opt.Config != nil && opt.Config.IsRuleEnabled("versions-tf", absDir) {
+		vResult, vErr := tfmod.ParseVersionsTF(absDir)
+		if vErr != nil {
+			return nil, vErr
+		}
+
+		if !vResult.Exists {
+			errs = append(errs, Error{
+				File:   absDir,
+				Kind:   MissingVersionsTF,
+				Detail: "module directory is missing versions.tf",
+			})
+		} else {
+			if !vResult.HasTerraformBlock {
+				errs = append(errs, Error{
+					File:   absDir,
+					Kind:   MissingTerraformBlock,
+					Detail: "versions.tf is missing a terraform block",
+				})
+			}
+
+			seen := make(map[string]string) // provider name → first file
+			for _, p := range vResult.Providers {
+				if !p.HasSource {
+					errs = append(errs, Error{
+						File:     absDir,
+						Variable: p.Name,
+						Kind:     MissingProviderSource,
+						Detail:   fmt.Sprintf("provider %q is missing source attribute", p.Name),
+					})
+				}
+				if !p.HasVersion {
+					errs = append(errs, Error{
+						File:     absDir,
+						Variable: p.Name,
+						Kind:     MissingProviderVersion,
+						Detail:   fmt.Sprintf("provider %q is missing version constraint", p.Name),
+					})
+				}
+				if firstFile, exists := seen[p.Name]; exists {
+					errs = append(errs, Error{
+						File:     absDir,
+						Variable: p.Name,
+						Kind:     DuplicateProvider,
+						Detail:   fmt.Sprintf("provider %q is declared in both %s and %s", p.Name, filepath.Base(firstFile), filepath.Base(p.File)),
+					})
+				} else {
+					seen[p.Name] = p.File
+				}
 			}
 		}
 	}

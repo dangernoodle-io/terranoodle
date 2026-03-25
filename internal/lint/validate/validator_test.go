@@ -338,6 +338,12 @@ func TestErrorKind_String(t *testing.T) {
 		{UnusedVariable, "UnusedVariable"},
 		{OptionalWithoutDefault, "OptionalWithoutDefault"},
 		{MissingIncludeExpose, "MissingIncludeExpose"},
+		{DisallowedFilename, "disallowed filename"},
+		{MissingVersionsTF, "missing versions.tf"},
+		{MissingTerraformBlock, "missing terraform block"},
+		{MissingProviderSource, "missing provider source"},
+		{MissingProviderVersion, "missing provider version"},
+		{DuplicateProvider, "duplicate provider"},
 		{ErrorKind(999), "unknown"},
 	}
 

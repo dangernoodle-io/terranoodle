@@ -28,6 +28,8 @@ func TestModuleDir_MissingDescription(t *testing.T) {
 		"non-snake-case":           {Enabled: false},
 		"unused-variable":          {Enabled: false},
 		"optional-without-default": {Enabled: false},
+		"allowed-filenames":        {Enabled: false},
+		"versions-tf":              {Enabled: false},
 	}}
 	errs, err := ModuleDir(moduleDirTestdata("module-quality"), Options{Config: cfg})
 	require.NoError(t, err)
@@ -43,6 +45,8 @@ func TestModuleDir_NonSnakeCase(t *testing.T) {
 		"non-snake-case":           {Enabled: true},
 		"unused-variable":          {Enabled: false},
 		"optional-without-default": {Enabled: false},
+		"allowed-filenames":        {Enabled: false},
+		"versions-tf":              {Enabled: false},
 	}}
 	errs, err := ModuleDir(moduleDirTestdata("module-quality"), Options{Config: cfg})
 	require.NoError(t, err)
@@ -58,6 +62,8 @@ func TestModuleDir_BothRulesEnabled(t *testing.T) {
 		"non-snake-case":           {Enabled: true},
 		"unused-variable":          {Enabled: false},
 		"optional-without-default": {Enabled: false},
+		"allowed-filenames":        {Enabled: false},
+		"versions-tf":              {Enabled: false},
 	}}
 	errs, err := ModuleDir(moduleDirTestdata("module-quality"), Options{Config: cfg})
 	require.NoError(t, err)
@@ -74,6 +80,8 @@ func TestModuleDir_AllClean(t *testing.T) {
 		"non-snake-case":           {Enabled: true},
 		"unused-variable":          {Enabled: false},
 		"optional-without-default": {Enabled: false},
+		"allowed-filenames":        {Enabled: false},
+		"versions-tf":              {Enabled: false},
 	}}
 	errs, err := ModuleDir(dir, Options{Config: cfg})
 	require.NoError(t, err)
@@ -93,7 +101,9 @@ func TestModuleDir_NonexistentDir(t *testing.T) {
 
 func TestModuleDir_UnusedVariable(t *testing.T) {
 	cfg := &config.LintConfig{Rules: map[string]config.RuleConfig{
-		"unused-variable": {Enabled: true},
+		"unused-variable":   {Enabled: true},
+		"allowed-filenames": {Enabled: false},
+		"versions-tf":       {Enabled: false},
 	}}
 	errs, err := ModuleDir(moduleDirTestdata("unused-variable"), Options{Config: cfg})
 	require.NoError(t, err)
@@ -115,6 +125,8 @@ func TestModuleDir_OptionalWithoutDefault(t *testing.T) {
 	cfg := &config.LintConfig{Rules: map[string]config.RuleConfig{
 		"optional-without-default": {Enabled: true},
 		"unused-variable":          {Enabled: false},
+		"allowed-filenames":        {Enabled: false},
+		"versions-tf":              {Enabled: false},
 	}}
 	errs, err := ModuleDir(moduleDirTestdata("optional-no-default"), Options{Config: cfg})
 	require.NoError(t, err)
@@ -130,5 +142,156 @@ func TestModuleDir_OptionalWithoutDefault_DisabledByDefault(t *testing.T) {
 	require.NoError(t, err)
 	for _, e := range errs {
 		assert.NotEqual(t, OptionalWithoutDefault, e.Kind)
+	}
+}
+
+func TestModuleDir_AllowedFilenames(t *testing.T) {
+	cfg := &config.LintConfig{Rules: map[string]config.RuleConfig{
+		"allowed-filenames": {Enabled: true},
+	}}
+	errs, err := ModuleDir(moduleDirTestdata("allowed-filenames"), Options{Config: cfg})
+	require.NoError(t, err)
+	var filenameErrs []Error
+	for _, e := range errs {
+		if e.Kind == DisallowedFilename {
+			filenameErrs = append(filenameErrs, e)
+		}
+	}
+	require.Len(t, filenameErrs, 1)
+	assert.Equal(t, "helpers.tf", filenameErrs[0].Variable)
+}
+
+func TestModuleDir_AllowedFilenames_Extended(t *testing.T) {
+	cfg := &config.LintConfig{Rules: map[string]config.RuleConfig{
+		"allowed-filenames": {Enabled: true, Options: map[string]interface{}{
+			"preset": "extended",
+		}},
+	}}
+	errs, err := ModuleDir(moduleDirTestdata("allowed-filenames-extended"), Options{Config: cfg})
+	require.NoError(t, err)
+	for _, e := range errs {
+		assert.NotEqual(t, DisallowedFilename, e.Kind)
+	}
+}
+
+func TestModuleDir_AllowedFilenames_Additional(t *testing.T) {
+	cfg := &config.LintConfig{Rules: map[string]config.RuleConfig{
+		"allowed-filenames": {Enabled: true, Options: map[string]interface{}{
+			"additional": []interface{}{"helpers.tf"},
+		}},
+	}}
+	errs, err := ModuleDir(moduleDirTestdata("allowed-filenames"), Options{Config: cfg})
+	require.NoError(t, err)
+	for _, e := range errs {
+		assert.NotEqual(t, DisallowedFilename, e.Kind)
+	}
+}
+
+func TestModuleDir_AllowedFilenames_DisabledByDefault(t *testing.T) {
+	cfg := config.Default()
+	errs, err := ModuleDir(moduleDirTestdata("allowed-filenames"), Options{Config: &cfg.Lint})
+	require.NoError(t, err)
+	for _, e := range errs {
+		assert.NotEqual(t, DisallowedFilename, e.Kind)
+	}
+}
+
+func TestModuleDir_VersionsTF_Missing(t *testing.T) {
+	cfg := &config.LintConfig{Rules: map[string]config.RuleConfig{
+		"versions-tf": {Enabled: true},
+	}}
+	errs, err := ModuleDir(moduleDirTestdata("versions-tf-missing"), Options{Config: cfg})
+	require.NoError(t, err)
+	var vErrs []Error
+	for _, e := range errs {
+		if e.Kind == MissingVersionsTF {
+			vErrs = append(vErrs, e)
+		}
+	}
+	require.Len(t, vErrs, 1)
+}
+
+func TestModuleDir_VersionsTF_NoTerraformBlock(t *testing.T) {
+	cfg := &config.LintConfig{Rules: map[string]config.RuleConfig{
+		"versions-tf": {Enabled: true},
+	}}
+	errs, err := ModuleDir(moduleDirTestdata("versions-tf-no-terraform"), Options{Config: cfg})
+	require.NoError(t, err)
+	var vErrs []Error
+	for _, e := range errs {
+		if e.Kind == MissingTerraformBlock {
+			vErrs = append(vErrs, e)
+		}
+	}
+	require.Len(t, vErrs, 1)
+}
+
+func TestModuleDir_VersionsTF_MissingSource(t *testing.T) {
+	cfg := &config.LintConfig{Rules: map[string]config.RuleConfig{
+		"versions-tf": {Enabled: true},
+	}}
+	errs, err := ModuleDir(moduleDirTestdata("versions-tf-invalid"), Options{Config: cfg})
+	require.NoError(t, err)
+	var sourceErrs []Error
+	for _, e := range errs {
+		if e.Kind == MissingProviderSource {
+			sourceErrs = append(sourceErrs, e)
+		}
+	}
+	require.NotEmpty(t, sourceErrs)
+}
+
+func TestModuleDir_VersionsTF_MissingVersion(t *testing.T) {
+	cfg := &config.LintConfig{Rules: map[string]config.RuleConfig{
+		"versions-tf": {Enabled: true},
+	}}
+	errs, err := ModuleDir(moduleDirTestdata("versions-tf-invalid"), Options{Config: cfg})
+	require.NoError(t, err)
+	var versionErrs []Error
+	for _, e := range errs {
+		if e.Kind == MissingProviderVersion {
+			versionErrs = append(versionErrs, e)
+		}
+	}
+	require.NotEmpty(t, versionErrs)
+}
+
+func TestModuleDir_VersionsTF_Duplicate(t *testing.T) {
+	cfg := &config.LintConfig{Rules: map[string]config.RuleConfig{
+		"versions-tf": {Enabled: true},
+	}}
+	errs, err := ModuleDir(moduleDirTestdata("versions-tf-duplicate"), Options{Config: cfg})
+	require.NoError(t, err)
+	var dupErrs []Error
+	for _, e := range errs {
+		if e.Kind == DuplicateProvider {
+			dupErrs = append(dupErrs, e)
+		}
+	}
+	require.Len(t, dupErrs, 1)
+	assert.Equal(t, "aws", dupErrs[0].Variable)
+}
+
+func TestModuleDir_VersionsTF_Valid(t *testing.T) {
+	cfg := &config.LintConfig{Rules: map[string]config.RuleConfig{
+		"versions-tf": {Enabled: true},
+	}}
+	errs, err := ModuleDir(moduleDirTestdata("versions-tf-valid"), Options{Config: cfg})
+	require.NoError(t, err)
+	for _, e := range errs {
+		assert.NotEqual(t, MissingVersionsTF, e.Kind)
+		assert.NotEqual(t, MissingTerraformBlock, e.Kind)
+		assert.NotEqual(t, MissingProviderSource, e.Kind)
+		assert.NotEqual(t, MissingProviderVersion, e.Kind)
+		assert.NotEqual(t, DuplicateProvider, e.Kind)
+	}
+}
+
+func TestModuleDir_VersionsTF_DisabledByDefault(t *testing.T) {
+	cfg := config.Default()
+	errs, err := ModuleDir(moduleDirTestdata("versions-tf-missing"), Options{Config: &cfg.Lint})
+	require.NoError(t, err)
+	for _, e := range errs {
+		assert.NotEqual(t, MissingVersionsTF, e.Kind)
 	}
 }

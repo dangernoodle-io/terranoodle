@@ -13,6 +13,7 @@ import (
 	"dangernoodle.io/terranoodle/internal/hclutils/tftype"
 	goversion "github.com/hashicorp/go-version"
 	"github.com/hashicorp/hcl/v2"
+	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/zclconf/go-cty/cty"
 )
 
@@ -51,6 +52,7 @@ const (
 	VersionsTFNotSymlink
 	MissingValidation
 	SensitiveOutput
+	DependencyMergeOrder
 )
 
 func (k ErrorKind) String() string {
@@ -101,6 +103,8 @@ func (k ErrorKind) String() string {
 		return "missing validation block"
 	case SensitiveOutput:
 		return "sensitive output without sensitive flag"
+	case DependencyMergeOrder:
+		return "dependency merge order"
 	default:
 		return "unknown"
 	}
@@ -295,6 +299,72 @@ func applyAllowList(errs []Error, opts Options) []Error {
 	return errs
 }
 
+// checkMergeOrder checks that dependency args in merge() follow the configured priority order.
+func checkMergeOrder(expr hcl.Expression, file string, opt Options) []Error {
+	if expr == nil {
+		return nil
+	}
+
+	firstList := getListOption(opt, "dependency-merge-order", "first")
+	if len(firstList) == 0 {
+		return nil
+	}
+
+	// Check if expression is a merge() function call
+	fn, ok := expr.(*hclsyntax.FunctionCallExpr)
+	if !ok || fn.Name != "merge" {
+		return nil
+	}
+
+	// Build priority map: name -> required position index
+	priority := make(map[string]int, len(firstList))
+	for i, name := range firstList {
+		priority[name] = i
+	}
+
+	// Walk args, track dependency positions and check ordering
+	var errs []Error
+	lastPriorityIdx := -1
+	lastPriorityName := ""
+	seenObjectLiteral := false
+
+	for _, arg := range fn.Args {
+		depName := hclutils.DepNameFromTraversal(arg)
+		if depName == "" {
+			// Check if it's an object literal
+			if _, isObj := arg.(*hclsyntax.ObjectConsExpr); isObj {
+				seenObjectLiteral = true
+			}
+			continue
+		}
+
+		// It's a dependency ref
+		idx, hasPriority := priority[depName]
+		if hasPriority {
+			if seenObjectLiteral {
+				errs = append(errs, Error{
+					File:     file,
+					Variable: depName,
+					Kind:     DependencyMergeOrder,
+					Detail:   fmt.Sprintf("dependency %q should appear before object literals in merge()", depName),
+				})
+			} else if idx < lastPriorityIdx {
+				errs = append(errs, Error{
+					File:     file,
+					Variable: depName,
+					Kind:     DependencyMergeOrder,
+					Detail:   fmt.Sprintf("dependency %q should appear before %q in merge()", depName, lastPriorityName),
+				})
+			} else {
+				lastPriorityIdx = idx
+				lastPriorityName = depName
+			}
+		}
+	}
+
+	return errs
+}
+
 // File validates a single terragrunt.hcl file.
 func File(path string, opts ...Options) ([]Error, error) {
 	absPath, err := filepath.Abs(path)
@@ -394,6 +464,12 @@ func File(path string, opts ...Options) ([]Error, error) {
 
 	errs := check(absPath, cfg.Inputs, variables, depOutputKeys, envVarKeys, cfg.IncludeInputKeys, tfVarKeys, cfg.EvalCtx)
 	results = append(results, errs...)
+
+	if opt.Config != nil && opt.Config.IsRuleEnabled("dependency-merge-order", absPath) {
+		mergeErrs := checkMergeOrder(cfg.InputsExpr, absPath, opt)
+		results = append(results, mergeErrs...)
+	}
+
 	results = filterErrors(applyAllowList(results, opt), opt)
 	results = applySeverity(results, opt)
 	return results, nil

@@ -74,7 +74,7 @@ func extractMergeKeys(fn *hclsyntax.FunctionCallExpr, ctx *hcl.EvalContext) (map
 
 		case *hclsyntax.RelativeTraversalExpr, *hclsyntax.ScopeTraversalExpr:
 			// dependency.X.outputs are handled separately via ExtractDepRefs
-			if depNameFromTraversal(a) != "" {
+			if DepNameFromTraversal(a) != "" {
 				continue
 			}
 			// Other traversals (e.g., include.root.locals.project) —
@@ -121,7 +121,7 @@ func ExtractDepRefs(expr hcl.Expression) []string {
 	var refs []string
 	seen := make(map[string]bool)
 	for _, arg := range fn.Args {
-		name := depNameFromTraversal(arg)
+		name := DepNameFromTraversal(arg)
 		if name != "" && !seen[name] {
 			refs = append(refs, name)
 			seen[name] = true
@@ -130,9 +130,9 @@ func ExtractDepRefs(expr hcl.Expression) []string {
 	return refs
 }
 
-// depNameFromTraversal checks if an expression is `dependency.<name>.outputs`
+// DepNameFromTraversal checks if an expression is `dependency.<name>.outputs`
 // and returns the dep name, or "" if it doesn't match.
-func depNameFromTraversal(expr hclsyntax.Expression) string {
+func DepNameFromTraversal(expr hclsyntax.Expression) string {
 	trav, ok := expr.(*hclsyntax.ScopeTraversalExpr)
 	if !ok {
 		return ""

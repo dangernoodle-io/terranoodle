@@ -14,6 +14,14 @@ import (
 	"github.com/zclconf/go-cty/cty"
 )
 
+// Severity indicates the severity level of a validation finding.
+type Severity int
+
+const (
+	SeverityError Severity = iota
+	SeverityWarning
+)
+
 // ErrorKind categorizes a validation error.
 type ErrorKind int
 
@@ -42,6 +50,7 @@ type Error struct {
 	Variable string
 	Kind     ErrorKind
 	Detail   string
+	Severity Severity
 }
 
 // tfVarEnvKeys returns a map of variable names parsed from TF_VAR_* environment variables.

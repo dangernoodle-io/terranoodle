@@ -381,3 +381,13 @@ func TestFile_RuleFilteringMultipleKinds(t *testing.T) {
 	require.Len(t, errs, 1, "should have only 1 extra-input error when missing-required disabled")
 	assert.Equal(t, ExtraInput, errs[0].Kind)
 }
+
+func TestSeverityDefault(t *testing.T) {
+	e := Error{}
+	assert.Equal(t, SeverityError, e.Severity, "zero value should be SeverityError")
+}
+
+func TestErrorWithWarningSeverity(t *testing.T) {
+	e := Error{Severity: SeverityWarning}
+	assert.Equal(t, SeverityWarning, e.Severity)
+}

@@ -44,6 +44,7 @@ const (
 	MissingProviderSource
 	MissingProviderVersion
 	DuplicateProvider
+	NoProviderBlock
 )
 
 func (k ErrorKind) String() string {
@@ -80,6 +81,8 @@ func (k ErrorKind) String() string {
 		return "missing provider version"
 	case DuplicateProvider:
 		return "duplicate provider"
+	case NoProviderBlock:
+		return "provider block in terragrunt config"
 	default:
 		return "unknown"
 	}
@@ -246,6 +249,19 @@ func File(path string, opts ...Options) ([]Error, error) {
 				Variable: inc.Name,
 				Kind:     MissingIncludeExpose,
 				Detail:   fmt.Sprintf("include %q is missing expose = true", inc.Name),
+			})
+		}
+	}
+
+	// Check for provider blocks
+	checkNoProviderBlock := opt.Config != nil && opt.Config.IsRuleEnabled("no-provider-block", absPath)
+	if checkNoProviderBlock {
+		for _, name := range cfg.ProviderBlockNames {
+			includeErrs = append(includeErrs, Error{
+				File:     absPath,
+				Variable: name,
+				Kind:     NoProviderBlock,
+				Detail:   fmt.Sprintf("provider %q block should not be in terragrunt config — use a generate block or define in the module", name),
 			})
 		}
 	}

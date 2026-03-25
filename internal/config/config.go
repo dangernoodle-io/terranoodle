@@ -238,6 +238,7 @@ func Default() *Config {
 				"missing-include-expose":   {Enabled: false},
 				"allowed-filenames":        {Enabled: false},
 				"versions-tf":              {Enabled: false},
+				"no-provider-block":        {Enabled: false},
 			},
 		},
 	}

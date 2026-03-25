@@ -344,6 +344,7 @@ func TestErrorKind_String(t *testing.T) {
 		{MissingProviderSource, "missing provider source"},
 		{MissingProviderVersion, "missing provider version"},
 		{DuplicateProvider, "duplicate provider"},
+		{NoProviderBlock, "provider block in terragrunt config"},
 		{ErrorKind(999), "unknown"},
 	}
 
@@ -739,5 +740,41 @@ func TestFile_MissingIncludeExpose_DisabledByDefault(t *testing.T) {
 	require.NoError(t, err)
 	for _, e := range errs {
 		assert.NotEqual(t, MissingIncludeExpose, e.Kind)
+	}
+}
+
+func TestFile_NoProviderBlock(t *testing.T) {
+	cfg := &config.LintConfig{Rules: map[string]config.RuleConfig{
+		"no-provider-block": {Enabled: true},
+	}}
+	errs, err := File(testdataPath("no-provider-block"), Options{Config: cfg})
+	require.NoError(t, err)
+	var providerErrs []Error
+	for _, e := range errs {
+		if e.Kind == NoProviderBlock {
+			providerErrs = append(providerErrs, e)
+		}
+	}
+	require.Len(t, providerErrs, 1)
+	assert.Equal(t, "aws", providerErrs[0].Variable)
+}
+
+func TestFile_NoProviderBlock_Clean(t *testing.T) {
+	cfg := &config.LintConfig{Rules: map[string]config.RuleConfig{
+		"no-provider-block": {Enabled: true},
+	}}
+	errs, err := File(testdataPath("simple-valid"), Options{Config: cfg})
+	require.NoError(t, err)
+	for _, e := range errs {
+		assert.NotEqual(t, NoProviderBlock, e.Kind)
+	}
+}
+
+func TestFile_NoProviderBlock_DisabledByDefault(t *testing.T) {
+	cfg := config.Default()
+	errs, err := File(testdataPath("no-provider-block"), Options{Config: &cfg.Lint})
+	require.NoError(t, err)
+	for _, e := range errs {
+		assert.NotEqual(t, NoProviderBlock, e.Kind)
 	}
 }

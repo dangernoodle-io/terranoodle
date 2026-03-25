@@ -14,15 +14,16 @@ import (
 
 // TerragruntConfig holds the parsed components of a terragrunt.hcl file.
 type TerragruntConfig struct {
-	Source           string
-	Inputs           map[string]hcl.Expression
-	DepRefs          []string           // dep names referenced via dependency.<name>.outputs in merge()
-	Dependencies     []DependencyConfig // all parsed dependency blocks
-	EvalCtx          *hcl.EvalContext   // context used for evaluating input expressions
-	Path             string             // absolute path to the parsed file
-	IncludeInputKeys map[string]bool    // input keys automatically merged from parent includes
-	TfVarFiles       []string           // resolved paths to terraform var files from extra_arguments
-	Includes         []IncludeConfig    // all parsed include blocks
+	Source             string
+	Inputs             map[string]hcl.Expression
+	DepRefs            []string           // dep names referenced via dependency.<name>.outputs in merge()
+	Dependencies       []DependencyConfig // all parsed dependency blocks
+	EvalCtx            *hcl.EvalContext   // context used for evaluating input expressions
+	Path               string             // absolute path to the parsed file
+	IncludeInputKeys   map[string]bool    // input keys automatically merged from parent includes
+	TfVarFiles         []string           // resolved paths to terraform var files from extra_arguments
+	Includes           []IncludeConfig    // all parsed include blocks
+	ProviderBlockNames []string           // names of provider blocks found in the config
 }
 
 // configFileSchema defines the top-level blocks we expect in a terragrunt.hcl.
@@ -34,6 +35,7 @@ var configFileSchema = &hcl.BodySchema{
 		{Type: "dependency", LabelNames: []string{"name"}},
 		{Type: "dependencies"},
 		{Type: "generate", LabelNames: []string{"name"}},
+		{Type: "provider", LabelNames: []string{"name"}},
 	},
 	Attributes: []hcl.AttributeSchema{
 		{Name: "inputs"},
@@ -150,6 +152,15 @@ func parseBody(body hcl.Body, path string) (*TerragruntConfig, error) {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
 	cfg.Dependencies = deps
+
+	// Phase 5: Collect provider block names
+	for _, block := range content.Blocks {
+		if block.Type == "provider" {
+			if len(block.Labels) > 0 {
+				cfg.ProviderBlockNames = append(cfg.ProviderBlockNames, block.Labels[0])
+			}
+		}
+	}
 
 	// Extract terraform.source (with full context)
 	for _, block := range content.Blocks {

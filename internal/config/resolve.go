@@ -68,10 +68,34 @@ func pathMatchesAny(path string, patterns []string) bool {
 	return false
 }
 
+// parseOptionValue parses a CLI string value into the appropriate type.
+// Comma-separated values become []interface{} lists.
+// Otherwise tries bool, int, float, falls back to string.
+func parseOptionValue(value string) interface{} {
+	if strings.Contains(value, ",") {
+		parts := strings.Split(value, ",")
+		result := make([]interface{}, len(parts))
+		for i, p := range parts {
+			result[i] = strings.TrimSpace(p)
+		}
+		return result
+	}
+	if b, err := strconv.ParseBool(value); err == nil {
+		return b
+	}
+	if n, err := strconv.ParseInt(value, 10, 64); err == nil {
+		return int(n)
+	}
+	if f, err := strconv.ParseFloat(value, 64); err == nil {
+		return f
+	}
+	return value
+}
+
 // Get retrieves a value from the config by dot-path key.
-// Supported keys: lint.rules.<name>, lint.exclude-dirs.
+// Supported keys: lint.rules.<name>, lint.rules.<name>.<option>, lint.exclude-dirs.
 func (c *Config) Get(key string) (string, error) {
-	parts := strings.SplitN(key, ".", 3)
+	parts := strings.SplitN(key, ".", 4)
 
 	if len(parts) < 2 || parts[0] != "lint" {
 		return "", fmt.Errorf("config: unknown key %q", key)
@@ -86,6 +110,28 @@ func (c *Config) Get(key string) (string, error) {
 		if !ok {
 			return "", fmt.Errorf("config: rule %q not configured", parts[2])
 		}
+
+		// Get rule option if requested
+		if len(parts) == 4 {
+			ruleName := parts[2]
+			optionName := parts[3]
+			val, ok := rule.Options[optionName]
+			if !ok {
+				return "", fmt.Errorf("config: rule %q has no option %q", ruleName, optionName)
+			}
+			// Stringify the value
+			switch v := val.(type) {
+			case []interface{}:
+				strs := make([]string, len(v))
+				for i, item := range v {
+					strs[i] = fmt.Sprintf("%v", item)
+				}
+				return strings.Join(strs, ","), nil
+			default:
+				return fmt.Sprintf("%v", val), nil
+			}
+		}
+
 		return strconv.FormatBool(rule.Enabled), nil
 
 	case "exclude-dirs":
@@ -97,9 +143,9 @@ func (c *Config) Get(key string) (string, error) {
 }
 
 // Set sets a value in the config by dot-path key.
-// Supported keys: lint.rules.<name>, lint.exclude-dirs.
+// Supported keys: lint.rules.<name>, lint.rules.<name>.<option>, lint.exclude-dirs.
 func (c *Config) Set(key, value string) error {
-	parts := strings.SplitN(key, ".", 3)
+	parts := strings.SplitN(key, ".", 4)
 
 	if len(parts) < 2 || parts[0] != "lint" {
 		return fmt.Errorf("config: unknown key %q", key)
@@ -110,14 +156,32 @@ func (c *Config) Set(key, value string) error {
 		if len(parts) < 3 {
 			return fmt.Errorf("config: key %q requires a rule name", key)
 		}
+
+		if c.Lint.Rules == nil {
+			c.Lint.Rules = make(map[string]RuleConfig)
+		}
+
+		// Set rule option if 4-part key
+		if len(parts) == 4 {
+			ruleName := parts[2]
+			optionName := parts[3]
+			existing := c.Lint.Rules[ruleName]
+			if existing.Options == nil {
+				existing.Options = make(map[string]interface{})
+			}
+			existing.Options[optionName] = parseOptionValue(value)
+			c.Lint.Rules[ruleName] = existing
+			return nil
+		}
+
+		// Set rule enabled flag (3-part key)
 		enabled, err := strconv.ParseBool(value)
 		if err != nil {
 			return fmt.Errorf("config: rule value must be true or false, got %q", value)
 		}
-		if c.Lint.Rules == nil {
-			c.Lint.Rules = make(map[string]RuleConfig)
-		}
-		c.Lint.Rules[parts[2]] = RuleConfig{Enabled: enabled}
+		existing := c.Lint.Rules[parts[2]]
+		existing.Enabled = enabled
+		c.Lint.Rules[parts[2]] = existing
 		return nil
 
 	case "exclude-dirs":

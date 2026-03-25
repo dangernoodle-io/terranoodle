@@ -752,3 +752,183 @@ func TestLintConfig_RuleSeverity(t *testing.T) {
 		})
 	}
 }
+
+// Test Set - preserves existing fields when updating enabled flag.
+func TestSet_PreservesExistingFields(t *testing.T) {
+	cfg := &Config{
+		Lint: LintConfig{
+			Rules: map[string]RuleConfig{
+				"test-rule": {
+					Enabled:  true,
+					Severity: "error",
+					Options: map[string]interface{}{
+						"max-warnings": 10,
+					},
+				},
+			},
+		},
+	}
+
+	// Change the enabled flag
+	err := cfg.Set("lint.rules.test-rule", "false")
+	require.NoError(t, err)
+
+	// Verify enabled is changed
+	assert.Equal(t, false, cfg.Lint.Rules["test-rule"].Enabled)
+
+	// Verify Severity is preserved
+	assert.Equal(t, "error", cfg.Lint.Rules["test-rule"].Severity)
+
+	// Verify Options are preserved
+	assert.Equal(t, 10, cfg.Lint.Rules["test-rule"].Options["max-warnings"])
+}
+
+// Test Set - rule option with string value.
+func TestSet_RuleOption_String(t *testing.T) {
+	cfg := &Config{}
+
+	err := cfg.Set("lint.rules.source-protocol.enforce", "https")
+	require.NoError(t, err)
+
+	rule := cfg.Lint.Rules["source-protocol"]
+	assert.Equal(t, "https", rule.Options["enforce"])
+	assert.IsType(t, "", rule.Options["enforce"])
+}
+
+// Test Set - rule option with comma-separated list.
+func TestSet_RuleOption_List(t *testing.T) {
+	cfg := &Config{}
+
+	err := cfg.Set("lint.rules.missing-validation.exclude", "labels,tags")
+	require.NoError(t, err)
+
+	rule := cfg.Lint.Rules["missing-validation"]
+	opts := rule.Options["exclude"]
+	require.IsType(t, []interface{}{}, opts)
+
+	list, ok := opts.([]interface{})
+	require.True(t, ok)
+	assert.Equal(t, 2, len(list))
+	assert.Equal(t, "labels", list[0])
+	assert.Equal(t, "tags", list[1])
+}
+
+// Test Set - rule option with bool value.
+func TestSet_RuleOption_Bool(t *testing.T) {
+	cfg := &Config{}
+
+	err := cfg.Set("lint.rules.source-ref-semver.sha", "true")
+	require.NoError(t, err)
+
+	rule := cfg.Lint.Rules["source-ref-semver"]
+	assert.Equal(t, true, rule.Options["sha"])
+	assert.IsType(t, true, rule.Options["sha"])
+}
+
+// Test Set - rule option with int value.
+func TestSet_RuleOption_Int(t *testing.T) {
+	cfg := &Config{}
+
+	err := cfg.Set("lint.rules.extra-inputs.max-warnings", "42")
+	require.NoError(t, err)
+
+	rule := cfg.Lint.Rules["extra-inputs"]
+	assert.Equal(t, 42, rule.Options["max-warnings"])
+	assert.IsType(t, 0, rule.Options["max-warnings"])
+}
+
+// Test Set - rule option with float value.
+func TestSet_RuleOption_Float(t *testing.T) {
+	cfg := &Config{}
+
+	err := cfg.Set("lint.rules.test-rule.threshold", "3.14")
+	require.NoError(t, err)
+
+	rule := cfg.Lint.Rules["test-rule"]
+	assert.Equal(t, 3.14, rule.Options["threshold"])
+	assert.IsType(t, 0.0, rule.Options["threshold"])
+}
+
+// Test Get - rule option roundtrip.
+func TestGet_RuleOption(t *testing.T) {
+	cfg := &Config{}
+
+	err := cfg.Set("lint.rules.test-rule.enforce", "https")
+	require.NoError(t, err)
+
+	val, err := cfg.Get("lint.rules.test-rule.enforce")
+	require.NoError(t, err)
+	assert.Equal(t, "https", val)
+}
+
+// Test Get - nonexistent rule option.
+func TestGet_RuleOptionMissing(t *testing.T) {
+	cfg := &Config{
+		Lint: LintConfig{
+			Rules: map[string]RuleConfig{
+				"test-rule": {Enabled: true},
+			},
+		},
+	}
+
+	_, err := cfg.Get("lint.rules.test-rule.nonexistent")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "has no option")
+}
+
+// Test parseOptionValue - comma-separated list.
+func TestParseOptionValue_List(t *testing.T) {
+	val := parseOptionValue("foo,bar,baz")
+	list, ok := val.([]interface{})
+	require.True(t, ok)
+	assert.Equal(t, 3, len(list))
+	assert.Equal(t, "foo", list[0])
+	assert.Equal(t, "bar", list[1])
+	assert.Equal(t, "baz", list[2])
+}
+
+// Test parseOptionValue - bool true.
+func TestParseOptionValue_BoolTrue(t *testing.T) {
+	val := parseOptionValue("true")
+	assert.Equal(t, true, val)
+	assert.IsType(t, true, val)
+}
+
+// Test parseOptionValue - bool false.
+func TestParseOptionValue_BoolFalse(t *testing.T) {
+	val := parseOptionValue("false")
+	assert.Equal(t, false, val)
+	assert.IsType(t, true, val)
+}
+
+// Test parseOptionValue - int.
+func TestParseOptionValue_Int(t *testing.T) {
+	val := parseOptionValue("42")
+	assert.Equal(t, 42, val)
+	assert.IsType(t, 0, val)
+}
+
+// Test parseOptionValue - float.
+func TestParseOptionValue_Float(t *testing.T) {
+	val := parseOptionValue("3.14")
+	assert.Equal(t, 3.14, val)
+	assert.IsType(t, 0.0, val)
+}
+
+// Test parseOptionValue - string fallback.
+func TestParseOptionValue_String(t *testing.T) {
+	val := parseOptionValue("https")
+	assert.Equal(t, "https", val)
+	assert.IsType(t, "", val)
+}
+
+// Test parseOptionValue - list with spaces.
+func TestParseOptionValue_ListWithSpaces(t *testing.T) {
+	val := parseOptionValue("foo, bar , baz")
+	list, ok := val.([]interface{})
+	require.True(t, ok)
+	assert.Equal(t, 3, len(list))
+	assert.Equal(t, "foo", list[0])
+	assert.Equal(t, "bar", list[1])
+	assert.Equal(t, "baz", list[2])
+}

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
@@ -13,6 +14,7 @@ import (
 )
 
 var configGlobalFlag bool
+var configProfileFlag string
 
 var configCmd = &cobra.Command{
 	Use:   "config",
@@ -47,6 +49,8 @@ var configInitCmd = &cobra.Command{
 
 func init() {
 	configSetCmd.Flags().BoolVar(&configGlobalFlag, "global", false, "Set in global config")
+	configSetCmd.Flags().StringVar(&configProfileFlag, "profile", "", "Target profile (implies --global)")
+	configGetCmd.Flags().StringVar(&configProfileFlag, "profile", "", "Read from a specific profile")
 	configInitCmd.Flags().BoolVar(&configGlobalFlag, "global", false, "Create global config")
 
 	configCmd.AddCommand(configGetCmd)
@@ -56,6 +60,32 @@ func init() {
 }
 
 func runConfigGet(cmd *cobra.Command, args []string) error {
+	if configProfileFlag != "" {
+		globalPath, err := config.GlobalPath()
+		if err != nil {
+			return err
+		}
+
+		globalCfg, err := config.LoadGlobal(globalPath)
+		if err != nil {
+			return fmt.Errorf("config get: load global config: %w", err)
+		}
+
+		profile, ok := globalCfg.Profiles[configProfileFlag]
+		if !ok {
+			return fmt.Errorf("config get: profile %q not found", configProfileFlag)
+		}
+
+		tempCfg := &config.Config{Lint: profile.Lint}
+		val, err := tempCfg.Get(args[0])
+		if err != nil {
+			return err
+		}
+
+		fmt.Println(val)
+		return nil
+	}
+
 	cwd, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("config get: %w", err)
@@ -78,20 +108,69 @@ func runConfigGet(cmd *cobra.Command, args []string) error {
 func runConfigSet(cmd *cobra.Command, args []string) error {
 	key, value := args[0], args[1]
 
-	var path string
+	// --profile implies --global
+	if configProfileFlag != "" {
+		configGlobalFlag = true
+	}
+
 	if configGlobalFlag {
+		var path string
 		var err error
 		path, err = config.GlobalPath()
 		if err != nil {
 			return err
 		}
-	} else {
-		cwd, err := os.Getwd()
+
+		// Load existing global config or create empty
+		var globalCfg *config.GlobalConfig
+		globalCfg, err = config.LoadGlobal(path)
 		if err != nil {
-			return fmt.Errorf("config set: %w", err)
+			globalCfg = &config.GlobalConfig{Profiles: make(map[string]config.Profile)}
 		}
-		path = filepath.Join(cwd, config.ProjectFile)
+
+		// Determine target profile name
+		profileName := "default"
+		if configProfileFlag != "" {
+			profileName = configProfileFlag
+		}
+
+		// Get existing profile or create empty
+		profile := globalCfg.Profiles[profileName]
+
+		// Handle special "bind" key
+		if key == "bind" {
+			profile.Bind = strings.Split(value, ",")
+		} else if strings.HasPrefix(key, "lint.") {
+			// Handle lint.* keys
+			if profile.Lint.Rules == nil {
+				profile.Lint.Rules = make(map[string]config.RuleConfig)
+			}
+			tempCfg := &config.Config{Lint: profile.Lint}
+			if err := tempCfg.Set(key, value); err != nil {
+				return err
+			}
+			profile.Lint = tempCfg.Lint
+		} else {
+			return fmt.Errorf("config set: unsupported key %q for profile", key)
+		}
+
+		// Write profile back to global config
+		globalCfg.Profiles[profileName] = profile
+
+		if err := config.SaveGlobal(path, globalCfg); err != nil {
+			return err
+		}
+
+		output.Success("Set %s = %s", key, value)
+		return nil
 	}
+
+	// Project config behavior (unchanged)
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("config set: %w", err)
+	}
+	path := filepath.Join(cwd, config.ProjectFile)
 
 	// Load existing or start empty
 	cfg, err := config.Load(path)
@@ -155,8 +234,14 @@ func runConfigInit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("config init: %s already exists", label)
 	}
 
-	if err := config.Save(path, config.Default()); err != nil {
-		return err
+	if configGlobalFlag {
+		if err := config.SaveGlobal(path, config.DefaultGlobal()); err != nil {
+			return err
+		}
+	} else {
+		if err := config.Save(path, config.Default()); err != nil {
+			return err
+		}
 	}
 
 	output.Success("Created %s", label)

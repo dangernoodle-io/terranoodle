@@ -480,3 +480,39 @@ func TestModuleDir_EmptyOutputsTF_WithOutputs(t *testing.T) {
 		assert.NotEqual(t, EmptyOutputsTF, e.Kind)
 	}
 }
+
+func TestModuleDir_VersionsTFSymlink_DisabledByDefault(t *testing.T) {
+	cfg := config.Default()
+	errs, err := ModuleDir(moduleDirTestdata("versions-tf-symlink"), Options{Config: &cfg.Lint})
+	require.NoError(t, err)
+	for _, e := range errs {
+		assert.NotEqual(t, VersionsTFNotSymlink, e.Kind)
+	}
+}
+
+func TestModuleDir_VersionsTFSymlink_NotSymlink(t *testing.T) {
+	cfg := &config.LintConfig{Rules: map[string]config.RuleConfig{
+		"versions-tf-symlink": {Enabled: true},
+	}}
+	errs, err := ModuleDir(moduleDirTestdata("versions-tf-symlink"), Options{Config: cfg})
+	require.NoError(t, err)
+	var symlinkErrs []Error
+	for _, e := range errs {
+		if e.Kind == VersionsTFNotSymlink {
+			symlinkErrs = append(symlinkErrs, e)
+		}
+	}
+	require.Len(t, symlinkErrs, 1)
+	assert.Contains(t, symlinkErrs[0].Detail, "not a symlink")
+}
+
+func TestModuleDir_VersionsTFSymlink_Valid(t *testing.T) {
+	cfg := &config.LintConfig{Rules: map[string]config.RuleConfig{
+		"versions-tf-symlink": {Enabled: true},
+	}}
+	errs, err := ModuleDir(moduleDirTestdata("versions-tf-symlink-valid"), Options{Config: cfg})
+	require.NoError(t, err)
+	for _, e := range errs {
+		assert.NotEqual(t, VersionsTFNotSymlink, e.Kind)
+	}
+}

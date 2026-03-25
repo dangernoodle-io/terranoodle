@@ -37,6 +37,7 @@ const (
 	NonSnakeCase
 	UnusedVariable
 	OptionalWithoutDefault
+	MissingIncludeExpose
 )
 
 func (k ErrorKind) String() string {
@@ -59,6 +60,8 @@ func (k ErrorKind) String() string {
 		return "UnusedVariable"
 	case OptionalWithoutDefault:
 		return "OptionalWithoutDefault"
+	case MissingIncludeExpose:
+		return "MissingIncludeExpose"
 	default:
 		return "unknown"
 	}
@@ -195,17 +198,50 @@ func File(path string, opts ...Options) ([]Error, error) {
 		return nil, err
 	}
 
-	if cfg.Source == "" {
-		// Can't validate without a resolvable source (remote sources handled in Phase 2)
-		return nil, nil
-	}
-
 	var opt Options
 	if len(opts) > 0 {
 		opt = opts[0]
 	}
 
+	// Check include expose before source-dependent checks
+	var includeErrs []Error
+	checkIncludeExpose := opt.Config != nil && opt.Config.IsRuleEnabled("missing-include-expose", absPath)
+
+	if checkIncludeExpose {
+		excludePatterns := getExcludePatterns(opt, "missing-include-expose")
+		for _, inc := range cfg.Includes {
+			if inc.Expose {
+				continue
+			}
+			excluded := false
+			for _, p := range excludePatterns {
+				if matched, _ := filepath.Match(p, inc.Name); matched {
+					excluded = true
+					break
+				}
+			}
+			if excluded {
+				continue
+			}
+			includeErrs = append(includeErrs, Error{
+				File:     absPath,
+				Variable: inc.Name,
+				Kind:     MissingIncludeExpose,
+				Detail:   fmt.Sprintf("include %q is missing expose = true", inc.Name),
+			})
+		}
+	}
+
+	if cfg.Source == "" {
+		// Can't validate without a resolvable source (remote sources handled in Phase 2)
+		if len(includeErrs) > 0 {
+			return filterErrors(includeErrs, opt), nil
+		}
+		return nil, nil
+	}
+
 	var results []Error
+	results = append(results, includeErrs...)
 	results = append(results, checkSourceRef(cfg.Source, absPath, opt)...)
 	results = append(results, checkSourceProtocol(cfg.Source, absPath, opt)...)
 

@@ -235,6 +235,7 @@ func Default() *Config {
 				"non-snake-case":           {Enabled: false},
 				"unused-variable":          {Enabled: false},
 				"optional-without-default": {Enabled: false},
+				"missing-include-expose":   {Enabled: false},
 			},
 		},
 	}

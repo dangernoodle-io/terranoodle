@@ -22,6 +22,7 @@ type TerragruntConfig struct {
 	Path             string             // absolute path to the parsed file
 	IncludeInputKeys map[string]bool    // input keys automatically merged from parent includes
 	TfVarFiles       []string           // resolved paths to terraform var files from extra_arguments
+	Includes         []IncludeConfig    // all parsed include blocks
 }
 
 // configFileSchema defines the top-level blocks we expect in a terragrunt.hcl.
@@ -140,6 +141,7 @@ func parseBody(body hcl.Body, path string) (*TerragruntConfig, error) {
 		EvalCtx:          ctx,
 		IncludeInputKeys: MergedIncludeInputKeys(includes, configDir),
 		TfVarFiles:       tfVarFiles,
+		Includes:         includes,
 	}
 
 	// Phase 4: Parse dependency blocks

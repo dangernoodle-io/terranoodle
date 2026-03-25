@@ -232,6 +232,7 @@ func Default() *Config {
 				"extra-input":       {Enabled: true},
 				"type-mismatch":     {Enabled: true},
 				"source-ref-semver": {Enabled: true},
+				"source-protocol":   {Enabled: false},
 			},
 		},
 	}

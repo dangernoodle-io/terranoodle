@@ -2,23 +2,37 @@ package importer
 
 import (
 	"bytes"
+	"embed"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"text/template"
 
 	"dangernoodle.io/terranoodle/internal/state/resolver"
 )
 
+//go:embed templates/import_block.tmpl
+var importTemplateFS embed.FS
+
+var importTmpl = template.Must(
+	template.New("import_block.tmpl").
+		ParseFS(importTemplateFS, "templates/import_block.tmpl"),
+)
+
+type importData struct {
+	Entries []resolver.ImportEntry
+}
+
 // GenerateImportsFile returns the contents of an imports.tf file containing
 // one import block per entry.
 func GenerateImportsFile(entries []resolver.ImportEntry) []byte {
+	if len(entries) == 0 {
+		return nil
+	}
 	var buf bytes.Buffer
-	for i, e := range entries {
-		if i > 0 {
-			buf.WriteByte('\n')
-		}
-		fmt.Fprintf(&buf, "import {\n  to = %s\n  id = %q\n}\n", e.Address, e.ID)
+	if err := importTmpl.Execute(&buf, importData{Entries: entries}); err != nil {
+		panic("importer: render import template: " + err.Error())
 	}
 	return buf.Bytes()
 }

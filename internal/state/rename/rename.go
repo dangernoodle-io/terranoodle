@@ -45,6 +45,10 @@ func DetectFromPlan(p *tfjson.Plan) []RenamePair {
 // MatchDestroyCreate finds destroy/create pairs of the same resource type and name as
 // rename candidates. It excludes resources that already have PreviousAddress set
 // (those are definite renames handled by DetectFromPlan).
+//
+// Two-tier matching:
+// 1. First pass: exact type+name matching
+// 2. Second pass: type-only matching for unmatched destroys with available creates.
 func MatchDestroyCreate(p *tfjson.Plan) []Candidate {
 	// Build set of addresses with PreviousAddress (already detected as renames).
 	knownMoved := make(map[string]bool)
@@ -55,9 +59,11 @@ func MatchDestroyCreate(p *tfjson.Plan) []Candidate {
 		}
 	}
 
-	// Group destroys and creates by type and name.
+	// Group destroys and creates by type+name (exact) and by type only.
 	destroysByKey := make(map[typeNameKey][]*tfjson.ResourceChange)
 	createsByKey := make(map[typeNameKey][]*tfjson.ResourceChange)
+	destroysByType := make(map[string][]*tfjson.ResourceChange)
+	createsByType := make(map[string][]*tfjson.ResourceChange)
 
 	for _, rc := range p.ResourceChanges {
 		if rc.Change == nil || knownMoved[rc.Address] {
@@ -66,14 +72,19 @@ func MatchDestroyCreate(p *tfjson.Plan) []Candidate {
 		key := typeNameKey{Type: rc.Type, Name: rc.Name}
 		if rc.Change.Actions.Delete() {
 			destroysByKey[key] = append(destroysByKey[key], rc)
+			destroysByType[rc.Type] = append(destroysByType[rc.Type], rc)
 		}
 		if rc.Change.Actions.Create() {
 			createsByKey[key] = append(createsByKey[key], rc)
+			createsByType[rc.Type] = append(createsByType[rc.Type], rc)
 		}
 	}
 
-	// Build candidates: for each destroy, find creates of the same type and name.
 	var candidates []Candidate
+	matchedDestroys := make(map[string]bool) // by address
+	matchedCreates := make(map[string]bool)  // by address
+
+	// First tier: exact match by type+name
 	for key, destroys := range destroysByKey {
 		creates, ok := createsByKey[key]
 		if !ok || len(creates) == 0 {
@@ -83,6 +94,37 @@ func MatchDestroyCreate(p *tfjson.Plan) []Candidate {
 			candidates = append(candidates, Candidate{
 				Destroy: d,
 				Creates: creates,
+			})
+			matchedDestroys[d.Address] = true
+			for _, c := range creates {
+				matchedCreates[c.Address] = true
+			}
+		}
+	}
+
+	// Second tier: type-only match for unmatched destroys
+	for typ, destroys := range destroysByType {
+		creates, ok := createsByType[typ]
+		if !ok {
+			continue
+		}
+		// Filter to only unmatched creates
+		var available []*tfjson.ResourceChange
+		for _, c := range creates {
+			if !matchedCreates[c.Address] {
+				available = append(available, c)
+			}
+		}
+		if len(available) == 0 {
+			continue
+		}
+		for _, d := range destroys {
+			if matchedDestroys[d.Address] {
+				continue
+			}
+			candidates = append(candidates, Candidate{
+				Destroy: d,
+				Creates: available,
 			})
 		}
 	}

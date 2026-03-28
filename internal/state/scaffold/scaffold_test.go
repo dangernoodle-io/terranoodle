@@ -194,3 +194,57 @@ func TestRenderYAML_EmptySlice(t *testing.T) {
 	output := buf.String()
 	assert.Contains(t, output, "# No resource types found")
 }
+
+func TestIAMBaseSuffix(t *testing.T) {
+	cases := []struct {
+		suffix string
+		want   string
+	}{
+		{"artifact_registry_repository_iam_member", "artifact_registry_repository_iam"},
+		{"project_iam_binding", "project_iam"},
+		{"storage_bucket_iam_policy", "storage_bucket_iam"},
+		{"compute_instance", ""},
+		{"project_iam", ""},
+	}
+	for _, tc := range cases {
+		assert.Equal(t, tc.want, iamBaseSuffix(tc.suffix), "suffix=%q", tc.suffix)
+	}
+}
+
+func TestParseImportSection_QuotedSpacedID(t *testing.T) {
+	markdown := "## Import\n\n" + "```" + "\nterraform import google_artifact_registry_repository_iam_member.default " +
+		`"projects/{{project}}/locations/{{location}}/repositories/{{repository}} roles/{{role}} {{member}}"` +
+		"\n" + "```" + "\n"
+	result := ParseImportSection(markdown)
+	want := "projects/{{project}}/locations/{{location}}/repositories/{{repository}} roles/{{role}} {{member}}"
+	assert.Equal(t, want, result)
+}
+
+func TestFetchImportFormat_IAMMemberFallback(t *testing.T) {
+	importBody := "## Import\n\n" + "```" + "\nterraform import google_artifact_registry_repository_iam_member.default " +
+		`"projects/{{project}}/locations/{{location}}/repositories/{{repository}} roles/{{role}} {{member}}"` +
+		"\n" + "```" + "\n"
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+		switch {
+		case strings.Contains(path, "artifact_registry_repository_iam_member"):
+			http.NotFound(w, r)
+		case strings.Contains(path, "artifact_registry_repository_iam.html.markdown"):
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprint(w, importBody)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	original := registryBaseURL
+	registryBaseURL = srv.URL
+	t.Cleanup(func() { registryBaseURL = original })
+
+	cache := map[string]string{}
+	result := FetchImportFormat(context.Background(), "google_artifact_registry_repository_iam_member", cache)
+	want := "projects/{{project}}/locations/{{location}}/repositories/{{repository}} roles/{{role}} {{member}}"
+	assert.Equal(t, want, result)
+}

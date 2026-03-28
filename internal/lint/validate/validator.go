@@ -1011,8 +1011,7 @@ func ModuleDir(dir string, opts ...Options) ([]Error, error) {
 
 func check(file string, inputs map[string]hcl.Expression, variables []tfmod.Variable, depOutputKeys map[string]bool, envVarKeys map[string]bool, includeInputKeys map[string]bool, tfVarKeys map[string]bool, evalCtx *hcl.EvalContext) []Error {
 	// Build lookup sets.
-	// Dep output keys count as provided (they satisfy required variables AND
-	// are exempt from extra-input errors — Terraform silently ignores them).
+	// Dep output keys count as provided (they satisfy required variables).
 	// Env var keys count as provided (they satisfy required variables but are NOT
 	// exempt from extra-input errors — they are not explicit inputs).
 	// Include input keys count as provided (they satisfy required variables but are NOT
@@ -1055,7 +1054,7 @@ func check(file string, inputs map[string]hcl.Expression, variables []tfmod.Vari
 		}
 	}
 
-	// Check for extra inputs — dep output keys are exempt even if no matching variable
+	// Check for extra inputs
 	extraKeys := make([]string, 0)
 	for k := range inputs {
 		if _, ok := varMap[k]; !ok && !depOutputKeys[k] {
@@ -1070,6 +1069,25 @@ func check(file string, inputs map[string]hcl.Expression, variables []tfmod.Vari
 			Variable: k,
 			Kind:     ExtraInput,
 			Detail:   fmt.Sprintf("input %q has no matching variable in module", k),
+		})
+	}
+
+	// Check for extra inputs from dependency outputs
+	extraDepKeys := make([]string, 0)
+	for k := range depOutputKeys {
+		if _, ok := varMap[k]; !ok {
+			extraDepKeys = append(extraDepKeys, k)
+		}
+	}
+	sort.Strings(extraDepKeys)
+
+	for _, k := range extraDepKeys {
+		errs = append(errs, Error{
+			File:     file,
+			Variable: k,
+			Kind:     ExtraInput,
+			Severity: SeverityWarning,
+			Detail:   fmt.Sprintf("input %q has no matching variable in module (from dependency outputs)", k),
 		})
 	}
 

@@ -26,7 +26,7 @@ func Fetch(source string) (catalogPath string, cleanup func(), err error) {
 	// Remote source — clone to a temp directory.
 	base, subdir, ref := hclutils.StripSubdir(source)
 
-	tmpDir, err := os.MkdirTemp("", "terra-generate-catalog-*")
+	tmpDir, err := os.MkdirTemp("", "terranoodle-catalog-*")
 	if err != nil {
 		return "", noop, fmt.Errorf("creating temp directory: %w", err)
 	}

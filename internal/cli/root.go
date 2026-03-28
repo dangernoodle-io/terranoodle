@@ -15,7 +15,7 @@ var Version string
 var rootCmd = &cobra.Command{
 	Use:          "terranoodle",
 	Short:        "Unified Terragrunt/Terraform toolchain",
-	Long:         "terranoodle combines terra-generate, terra-import, and terra-lint into a single binary.",
+	Long:         "Unified Terragrunt/Terraform toolchain for catalog generation, state imports, and linting.",
 	SilenceUsage: true,
 }
 

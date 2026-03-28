@@ -24,7 +24,7 @@ type TemplateDef struct {
 }
 
 // UnitDef holds a single template block — one tenant/unit entry within a template
-// definition file. Named UnitDef to distinguish it from terra-hclutils' StackConfig
+// definition file. Named UnitDef to distinguish it from hclutils' StackConfig
 // type, which has different semantics.
 type UnitDef struct {
 	Name      string
@@ -60,7 +60,7 @@ var templateBlockSchema = &hcl.BodySchema{
 	},
 }
 
-// ParseTemplateFile parses a terra-generate template definition HCL file.
+// ParseTemplateFile parses a catalog template definition HCL file.
 // Returns the parsed definition, any warnings (e.g. unresolved locals), and any error.
 func ParseTemplateFile(path string) (*TemplateDef, []string, error) {
 	absPath, err := filepath.Abs(path)

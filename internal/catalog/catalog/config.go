@@ -12,7 +12,7 @@ import (
 	"dangernoodle.io/terranoodle/internal/output"
 )
 
-// CatalogConfig holds configuration from the catalog's terra-generate.hcl file.
+// CatalogConfig holds configuration from the catalog's catalog config file.
 type CatalogConfig struct {
 	IgnoreDeps    []string // dependency labels to ignore during dep validation (not service deps)
 	NameMustMatch string   // values key that must match template name (empty = no check)
@@ -31,7 +31,7 @@ var catalogConfigBlockSchema = &hcl.BodySchema{
 	},
 }
 
-// ParseCatalogConfig reads an optional terra-generate.hcl file at the catalog root.
+// ParseCatalogConfig reads an optional catalog config file at the catalog root.
 // Returns an empty config (not an error) if the file does not exist.
 func ParseCatalogConfig(catalogPath string) (*CatalogConfig, error) {
 	configPath := filepath.Join(catalogPath, "terra-generate.hcl")

@@ -51,6 +51,10 @@ To embed a version:
 go build -ldflags "-X dangernoodle.io/terranoodle/internal/cli.Version=v0.1.0-alpha.1" -o terranoodle ./
 ```
 
+## Wiki
+
+Commit wiki changes locally on `master`. The `/dn-go-release` skill pushes wiki commits to origin during releases.
+
 ## Packages
 
 | Package | Purpose |

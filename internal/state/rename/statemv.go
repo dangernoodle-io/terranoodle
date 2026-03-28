@@ -3,13 +3,13 @@ package rename
 import (
 	"context"
 	"fmt"
-	"os"
+	"io"
 
 	"dangernoodle.io/terranoodle/internal/state/tfexec"
 )
 
 func stateMv(ctx context.Context, workDir, src, dst, bin string) error {
-	return tfexec.Run(ctx, bin, workDir, os.Stdout, os.Stderr, "state", "mv", src, dst)
+	return tfexec.Run(ctx, bin, workDir, io.Discard, io.Discard, "state", "mv", src, dst)
 }
 
 // StateMv runs `terraform state mv <from> <to>` in workDir.

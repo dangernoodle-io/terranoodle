@@ -3,13 +3,13 @@ package remove
 import (
 	"context"
 	"fmt"
-	"os"
+	"io"
 
 	"dangernoodle.io/terranoodle/internal/state/tfexec"
 )
 
 func stateRm(ctx context.Context, workDir, addr, bin string) error {
-	return tfexec.Run(ctx, bin, workDir, os.Stdout, os.Stderr, "state", "rm", addr)
+	return tfexec.Run(ctx, bin, workDir, io.Discard, io.Discard, "state", "rm", addr)
 }
 
 // StateRm runs `terraform state rm <addr>` in workDir.

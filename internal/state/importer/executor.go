@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -54,7 +55,7 @@ func CheckInit(workDir string) error {
 }
 
 func apply(ctx context.Context, workDir, bin string) error {
-	return tfexec.Run(ctx, bin, workDir, os.Stdout, os.Stderr, "apply", "-auto-approve")
+	return tfexec.Run(ctx, bin, workDir, io.Discard, io.Discard, "apply", "-auto-approve")
 }
 
 // Apply runs terraform apply in workDir, applying any import blocks present.
@@ -120,7 +121,7 @@ func TerragruntGeneratePlan(ctx context.Context, workDir string, verbose bool) (
 }
 
 func terraformImport(ctx context.Context, workDir, addr, id, bin string) error {
-	return tfexec.Run(ctx, bin, workDir, os.Stdout, os.Stderr, "import", addr, id)
+	return tfexec.Run(ctx, bin, workDir, io.Discard, io.Discard, "import", addr, id)
 }
 
 // TerraformImport runs `terraform import <addr> <id>` in workDir.

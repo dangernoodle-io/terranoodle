@@ -9,6 +9,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	profileconfig "dangernoodle.io/terranoodle/internal/config"
+	stateconfig "dangernoodle.io/terranoodle/internal/state/config"
 )
 
 func TestFormatToTemplate_ValidFormat(t *testing.T) {
@@ -247,4 +250,198 @@ func TestFetchImportFormat_IAMMemberFallback(t *testing.T) {
 	result := FetchImportFormat(context.Background(), "google_artifact_registry_repository_iam_member", cache)
 	want := "projects/{{project}}/locations/{{location}}/repositories/{{repository}} roles/{{role}} {{member}}"
 	assert.Equal(t, want, result)
+}
+
+// mockLoadFn returns a map-based loader for testing.
+func mockLoadFn(stateConfigs map[string]*stateconfig.Config) func(string) (*stateconfig.Config, error) {
+	return func(path string) (*stateconfig.Config, error) {
+		if cfg, ok := stateConfigs[path]; ok {
+			return cfg, nil
+		}
+		// Return empty config if not found (matches store.Load behavior)
+		return &stateconfig.Config{
+			Vars:      make(map[string]string),
+			Types:     make(map[string]stateconfig.TypeMapping),
+			Resolvers: make(map[string]stateconfig.Resolver),
+		}, nil
+	}
+}
+
+// mockStatePathFn returns a function that converts state names to paths for testing.
+func mockStatePathFn(pathMap map[string]string) func(string) (string, error) {
+	return func(stateName string) (string, error) {
+		if path, ok := pathMap[stateName]; ok {
+			return path, nil
+		}
+		return "/tmp/" + stateName, nil
+	}
+}
+
+func TestPreFill_ReplacesTodo(t *testing.T) {
+	stateConfigs := map[string]*stateconfig.Config{
+		"/tmp/default": {
+			Types: map[string]stateconfig.TypeMapping{
+				"google_compute_instance": {
+					ID: "projects/{{ .project }}/zones/{{ .zone }}/instances/{{ .name }}",
+				},
+			},
+		},
+	}
+
+	types := []TypeInfo{
+		{
+			ResourceType: "google_compute_instance",
+			Fields: map[string]string{
+				"project": "acme-project",
+				"zone":    "us-central1-a",
+				"name":    "test-instance",
+			},
+			IDTemplate: "TODO",
+		},
+	}
+
+	result := PreFill(types, nil, mockStatePathFn(map[string]string{}), mockLoadFn(stateConfigs))
+
+	assert.Len(t, result, 1)
+	assert.Equal(t, "projects/{{ .project }}/zones/{{ .zone }}/instances/{{ .name }}", result[0].IDTemplate)
+}
+
+func TestPreFill_PreservesNonTodo(t *testing.T) {
+	stateConfigs := map[string]*stateconfig.Config{
+		"/tmp/default": {
+			Types: map[string]stateconfig.TypeMapping{
+				"google_compute_instance": {
+					ID: "projects/{{ .project }}/zones/{{ .zone }}/instances/{{ .name }}",
+				},
+			},
+		},
+	}
+
+	types := []TypeInfo{
+		{
+			ResourceType: "google_compute_instance",
+			Fields: map[string]string{
+				"project": "acme-project",
+			},
+			IDTemplate: "custom/id/template",
+		},
+	}
+
+	result := PreFill(types, nil, mockStatePathFn(map[string]string{}), mockLoadFn(stateConfigs))
+
+	assert.Len(t, result, 1)
+	assert.Equal(t, "custom/id/template", result[0].IDTemplate)
+}
+
+func TestPreFill_UnknownTypeStaysTodo(t *testing.T) {
+	stateConfigs := map[string]*stateconfig.Config{
+		"/tmp/default": {
+			Types: map[string]stateconfig.TypeMapping{
+				"google_compute_instance": {
+					ID: "projects/{{ .project }}/zones/{{ .zone }}/instances/{{ .name }}",
+				},
+			},
+		},
+	}
+
+	types := []TypeInfo{
+		{
+			ResourceType: "aws_s3_bucket",
+			Fields: map[string]string{
+				"name": "test-bucket",
+			},
+			IDTemplate: "TODO",
+		},
+	}
+
+	result := PreFill(types, nil, mockStatePathFn(map[string]string{}), mockLoadFn(stateConfigs))
+
+	assert.Len(t, result, 1)
+	assert.Equal(t, "TODO", result[0].IDTemplate)
+}
+
+func TestPreFill_MultipleProviders(t *testing.T) {
+	stateConfigs := map[string]*stateconfig.Config{
+		"/tmp/default": {
+			Types: map[string]stateconfig.TypeMapping{
+				"google_compute_instance": {
+					ID: "projects/{{ .project }}/zones/{{ .zone }}/instances/{{ .name }}",
+				},
+			},
+		},
+		"/tmp/aws-profile": {
+			Types: map[string]stateconfig.TypeMapping{
+				"aws_s3_bucket": {
+					ID: "{{ .bucket_name }}",
+				},
+			},
+		},
+	}
+
+	pathMap := map[string]string{
+		"default":     "/tmp/default",
+		"aws-profile": "/tmp/aws-profile",
+	}
+
+	globalCfg := &profileconfig.GlobalConfig{
+		Profiles: map[string]profileconfig.Profile{
+			"aws": {
+				Scaffold: profileconfig.ScaffoldConfig{
+					State:     "aws-profile",
+					Providers: []string{"aws"},
+				},
+			},
+		},
+	}
+
+	types := []TypeInfo{
+		{
+			ResourceType: "google_compute_instance",
+			Fields:       map[string]string{"project": "acme-project"},
+			IDTemplate:   "TODO",
+		},
+		{
+			ResourceType: "aws_s3_bucket",
+			Fields:       map[string]string{"bucket_name": "acme-bucket"},
+			IDTemplate:   "TODO",
+		},
+	}
+
+	result := PreFill(types, globalCfg, mockStatePathFn(pathMap), mockLoadFn(stateConfigs))
+
+	assert.Len(t, result, 2)
+	assert.Equal(t, "projects/{{ .project }}/zones/{{ .zone }}/instances/{{ .name }}", result[0].IDTemplate)
+	assert.Equal(t, "{{ .bucket_name }}", result[1].IDTemplate)
+}
+
+func TestPreFill_NilGlobalConfig(t *testing.T) {
+	stateConfigs := map[string]*stateconfig.Config{
+		"/tmp/default": {
+			Types: map[string]stateconfig.TypeMapping{
+				"google_compute_instance": {
+					ID: "projects/{{ .project }}/zones/{{ .zone }}/instances/{{ .name }}",
+				},
+			},
+		},
+	}
+
+	types := []TypeInfo{
+		{
+			ResourceType: "google_compute_instance",
+			Fields: map[string]string{
+				"project": "acme-project",
+			},
+			IDTemplate: "TODO",
+		},
+	}
+
+	result := PreFill(types, nil, mockStatePathFn(map[string]string{}), mockLoadFn(stateConfigs))
+
+	assert.Len(t, result, 1)
+	assert.Equal(t, "projects/{{ .project }}/zones/{{ .zone }}/instances/{{ .name }}", result[0].IDTemplate)
+}
+
+func TestPreFill_EmptyTypes(t *testing.T) {
+	result := PreFill([]TypeInfo{}, nil, mockStatePathFn(map[string]string{}), mockLoadFn(map[string]*stateconfig.Config{}))
+	assert.Empty(t, result)
 }

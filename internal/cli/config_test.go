@@ -464,3 +464,145 @@ func TestConfigGet_ProfileNotFound(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not found")
 }
+
+// TestConfigSet_ScaffoldState sets scaffold.state on a profile.
+func TestConfigSet_ScaffoldState(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	oldProfileFlag := configProfileFlag
+	oldGlobalFlag := configGlobalFlag
+	t.Cleanup(func() {
+		configProfileFlag = oldProfileFlag
+		configGlobalFlag = oldGlobalFlag
+	})
+
+	configProfileFlag = "gcp"
+	configGlobalFlag = false
+
+	tmpDir := t.TempDir()
+	t.Chdir(tmpDir)
+
+	err := runConfigSet(configSetCmd, []string{"scaffold.state", "gs://acme-corp-state/prod"})
+	require.NoError(t, err)
+
+	// Verify global config was written with the scaffold.state
+	globalPath := filepath.Join(tmpHome, ".config", "terranoodle", config.GlobalFile)
+	data, err := os.ReadFile(globalPath)
+	require.NoError(t, err)
+
+	var globalCfg config.GlobalConfig
+	err = yaml.Unmarshal(data, &globalCfg)
+	require.NoError(t, err)
+
+	assert.NotNil(t, globalCfg.Profiles["gcp"])
+	assert.Equal(t, "gs://acme-corp-state/prod", globalCfg.Profiles["gcp"].Scaffold.State)
+}
+
+// TestConfigSet_ScaffoldProviders sets scaffold.providers on a profile.
+func TestConfigSet_ScaffoldProviders(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	oldProfileFlag := configProfileFlag
+	oldGlobalFlag := configGlobalFlag
+	t.Cleanup(func() {
+		configProfileFlag = oldProfileFlag
+		configGlobalFlag = oldGlobalFlag
+	})
+
+	configProfileFlag = "gcp"
+	configGlobalFlag = false
+
+	tmpDir := t.TempDir()
+	t.Chdir(tmpDir)
+
+	err := runConfigSet(configSetCmd, []string{"scaffold.providers", "google,google-beta"})
+	require.NoError(t, err)
+
+	// Verify global config was written with the scaffold.providers
+	globalPath := filepath.Join(tmpHome, ".config", "terranoodle", config.GlobalFile)
+	data, err := os.ReadFile(globalPath)
+	require.NoError(t, err)
+
+	var globalCfg config.GlobalConfig
+	err = yaml.Unmarshal(data, &globalCfg)
+	require.NoError(t, err)
+
+	assert.NotNil(t, globalCfg.Profiles["gcp"])
+	assert.Equal(t, []string{"google", "google-beta"}, globalCfg.Profiles["gcp"].Scaffold.Providers)
+}
+
+// TestConfigGet_ScaffoldState retrieves scaffold.state from a profile.
+func TestConfigGet_ScaffoldState(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	oldProfileFlag := configProfileFlag
+	t.Cleanup(func() { configProfileFlag = oldProfileFlag })
+
+	// Create a global config with a gcp profile that has scaffold.state
+	configDir := filepath.Join(tmpHome, ".config", "terranoodle")
+	err := os.MkdirAll(configDir, 0o755)
+	require.NoError(t, err)
+
+	globalCfg := &config.GlobalConfig{
+		Profiles: map[string]config.Profile{
+			"gcp": {
+				Scaffold: config.ScaffoldConfig{
+					State: "gs://acme-corp-state/prod",
+				},
+			},
+		},
+	}
+
+	configPath := filepath.Join(configDir, config.GlobalFile)
+	data, err := yaml.Marshal(globalCfg)
+	require.NoError(t, err)
+	err = os.WriteFile(configPath, data, 0o644)
+	require.NoError(t, err)
+
+	configProfileFlag = "gcp"
+	tmpDir := t.TempDir()
+	t.Chdir(tmpDir)
+
+	err = runConfigGet(configGetCmd, []string{"scaffold.state"})
+	require.NoError(t, err)
+}
+
+// TestConfigGet_ScaffoldProviders retrieves scaffold.providers from a profile.
+func TestConfigGet_ScaffoldProviders(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	oldProfileFlag := configProfileFlag
+	t.Cleanup(func() { configProfileFlag = oldProfileFlag })
+
+	// Create a global config with an aws profile that has scaffold.providers
+	configDir := filepath.Join(tmpHome, ".config", "terranoodle")
+	err := os.MkdirAll(configDir, 0o755)
+	require.NoError(t, err)
+
+	globalCfg := &config.GlobalConfig{
+		Profiles: map[string]config.Profile{
+			"aws": {
+				Scaffold: config.ScaffoldConfig{
+					Providers: []string{"aws", "random"},
+				},
+			},
+		},
+	}
+
+	configPath := filepath.Join(configDir, config.GlobalFile)
+	data, err := yaml.Marshal(globalCfg)
+	require.NoError(t, err)
+	err = os.WriteFile(configPath, data, 0o644)
+	require.NoError(t, err)
+
+	configProfileFlag = "aws"
+	tmpDir := t.TempDir()
+	t.Chdir(tmpDir)
+
+	err = runConfigGet(configGetCmd, []string{"scaffold.providers"})
+	require.NoError(t, err)
+}

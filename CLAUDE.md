@@ -1,6 +1,6 @@
 # terranoodle
 
-Unified Terragrunt/Terraform toolchain. Single binary combining terra-generate, terra-import, and terra-lint.
+Unified Terragrunt/Terraform toolchain.
 
 ## Module
 
@@ -23,7 +23,7 @@ terranoodle
     import [flags]     # generate import blocks from terraform plan (--dry-run for preview)
     remove [flags]     # remove destroyed resources from state without destroying infrastructure
     rename [flags]     # detect renames and generate moved blocks or execute state mv
-    scaffold [flags]   # scaffold import config from existing state
+    scaffold [flags]   # scaffold import config from plan (-o file, --save to central state)
 ```
 
 ## Install
@@ -71,5 +71,6 @@ go build -ldflags "-X dangernoodle.io/terranoodle/internal/cli.Version=v0.1.0-al
 | `internal/state/rename/` | Rename detection, moved block generation, state mv |
 | `internal/state/resolver/` | ID resolution engine |
 | `internal/state/scaffold/` | Scaffold YAML generation |
+| `internal/state/scaffold/store/` | Central scaffold state persistence |
 | `internal/lint/validate/` | Lint validation rules and walker |
 | `internal/lint/report/` | Lint reporting |

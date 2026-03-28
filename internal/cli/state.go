@@ -11,6 +11,7 @@ import (
 	tfjson "github.com/hashicorp/terraform-json"
 	"github.com/spf13/cobra"
 
+	profileconfig "dangernoodle.io/terranoodle/internal/config"
 	"dangernoodle.io/terranoodle/internal/output"
 	"dangernoodle.io/terranoodle/internal/state/config"
 	"dangernoodle.io/terranoodle/internal/state/importer"
@@ -20,6 +21,7 @@ import (
 	"dangernoodle.io/terranoodle/internal/state/rename"
 	"dangernoodle.io/terranoodle/internal/state/resolver"
 	"dangernoodle.io/terranoodle/internal/state/scaffold"
+	"dangernoodle.io/terranoodle/internal/state/scaffold/store"
 	"dangernoodle.io/terranoodle/internal/ui"
 	"dangernoodle.io/terranoodle/internal/version"
 )
@@ -47,6 +49,7 @@ var (
 	scaffoldDirFlag           string
 	scaffoldOutputFlag        string
 	scaffoldFetchRegistryFlag bool
+	scaffoldSaveFlag          bool
 )
 
 // state rename flags.
@@ -113,8 +116,23 @@ var stateImportCmd = &cobra.Command{
 
 var stateScaffoldCmd = &cobra.Command{
 	Use:   "scaffold",
-	Short: "Scaffold an import config from existing state",
-	RunE:  runStateScaffold,
+	Short: "Scaffold an import config from a terraform plan",
+	Long: `Scaffold an import config YAML from resources in a terraform plan.
+
+By default, the id field for each resource type is set to "TODO" and must
+be filled in manually. Pass --fetch-registry to auto-populate id templates
+by looking up the import format from the Terraform provider documentation.
+
+Known templates from central scaffold state (~/.config/terranoodle/scaffold/state/)
+are automatically used when available. Use --save to persist new templates
+back to central state for future use.
+
+Example:
+
+  terranoodle state scaffold                          # id: "TODO"
+  terranoodle state scaffold --fetch-registry         # id: "projects/{{ .project }}/..."
+  terranoodle state scaffold --fetch-registry --save  # fetch + save to central state`,
+	RunE: runStateScaffold,
 }
 
 var stateRenameCmd = &cobra.Command{
@@ -144,6 +162,7 @@ func init() {
 	stateScaffoldCmd.Flags().StringVar(&scaffoldDirFlag, "dir", "", "Working directory (default: current directory)")
 	stateScaffoldCmd.Flags().StringVarP(&scaffoldOutputFlag, "output", "o", "", "Output file (default: stdout)")
 	stateScaffoldCmd.Flags().BoolVar(&scaffoldFetchRegistryFlag, "fetch-registry", false, "Fetch import formats from the Terraform registry")
+	stateScaffoldCmd.Flags().BoolVar(&scaffoldSaveFlag, "save", false, "Save type templates to central scaffold state")
 
 	stateRenameCmd.Flags().BoolVar(&renameMovedFlag, "moved", false, "Generate moved {} blocks")
 	stateRenameCmd.Flags().BoolVar(&renameMvFlag, "mv", false, "Execute terraform/terragrunt state mv commands")
@@ -568,6 +587,13 @@ func runStateScaffold(cmd *cobra.Command, args []string) error {
 
 	types := scaffold.Generate(creates, formats)
 
+	// Load global config for scaffold state (best-effort; nil is safe).
+	globalPath, _ := profileconfig.GlobalPath()
+	globalCfg, _ := profileconfig.LoadGlobal(globalPath)
+
+	// Pre-fill: replace "TODO" with known templates from central state.
+	types = scaffold.PreFill(types, globalCfg, store.StatePath, store.Load)
+
 	// Determine writer.
 	var writer *os.File
 	if scaffoldOutputFlag != "" {
@@ -580,7 +606,22 @@ func runStateScaffold(cmd *cobra.Command, args []string) error {
 		writer = os.Stdout
 	}
 
-	return scaffold.RenderYAML(writer, types)
+	if err := scaffold.RenderYAML(writer, types); err != nil {
+		return err
+	}
+
+	if scaffoldSaveFlag {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return fmt.Errorf("state scaffold: get cwd: %w", err)
+		}
+		if err := store.SaveTypes(types, globalCfg, cwd, os.Stdin, os.Stderr); err != nil {
+			return fmt.Errorf("state scaffold: save: %w", err)
+		}
+		output.Success("Scaffold state saved")
+	}
+
+	return nil
 }
 
 func runStateRename(cmd *cobra.Command, args []string) error {

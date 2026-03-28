@@ -10,10 +10,17 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// ScaffoldConfig holds scaffold-specific profile configuration.
+type ScaffoldConfig struct {
+	State     string   `yaml:"state,omitempty"`
+	Providers []string `yaml:"providers,omitempty"`
+}
+
 // Profile holds per-profile configuration.
 type Profile struct {
-	Bind []string   `yaml:"bind,omitempty"`
-	Lint LintConfig `yaml:"lint,omitempty"`
+	Bind     []string       `yaml:"bind,omitempty"`
+	Lint     LintConfig     `yaml:"lint,omitempty"`
+	Scaffold ScaffoldConfig `yaml:"scaffold,omitempty"`
 }
 
 // GlobalConfig is the schema for ~/.config/terranoodle/config.yml.
@@ -31,6 +38,9 @@ func LoadGlobal(path string) (*GlobalConfig, error) {
 	var cfg GlobalConfig
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("config: parse %q: %w", path, err)
+	}
+	if err := ValidateScaffoldProviders(&cfg); err != nil {
+		return nil, err
 	}
 	return &cfg, nil
 }
@@ -103,4 +113,58 @@ func matchBind(cwd, bind string) bool {
 // containsGlob reports whether s contains glob metacharacters.
 func containsGlob(s string) bool {
 	return strings.ContainsAny(s, "*?[")
+}
+
+// ValidateScaffoldProviders checks that no provider appears in more than one profile's
+// Providers list. Returns a descriptive error if a duplicate is found.
+func ValidateScaffoldProviders(cfg *GlobalConfig) error {
+	if cfg == nil || len(cfg.Profiles) == 0 {
+		return nil
+	}
+
+	providerToProfiles := make(map[string][]string)
+
+	// Iterate through all profiles and collect provider-to-profile mappings
+	for profileName, profile := range cfg.Profiles {
+		for _, provider := range profile.Scaffold.Providers {
+			providerToProfiles[provider] = append(providerToProfiles[provider], profileName)
+		}
+	}
+
+	// Check for duplicates
+	for provider, profiles := range providerToProfiles {
+		if len(profiles) > 1 {
+			// Sort for deterministic error messages
+			sort.Strings(profiles)
+			return fmt.Errorf("config: provider %q appears in multiple profiles: %v", provider, profiles)
+		}
+	}
+
+	return nil
+}
+
+// ScaffoldProfileForProvider returns the profile name whose Providers list contains
+// the given provider, or "" if none matches. Iterates profiles alphabetically
+// for deterministic results.
+func ScaffoldProfileForProvider(cfg *GlobalConfig, provider string) string {
+	if cfg == nil || len(cfg.Profiles) == 0 {
+		return ""
+	}
+
+	// Sort profile names for deterministic matching
+	names := make([]string, 0, len(cfg.Profiles))
+	for name := range cfg.Profiles {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	for _, name := range names {
+		profile := cfg.Profiles[name]
+		for _, p := range profile.Scaffold.Providers {
+			if p == provider {
+				return name
+			}
+		}
+	}
+	return ""
 }

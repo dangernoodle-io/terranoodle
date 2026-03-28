@@ -76,8 +76,19 @@ func runConfigGet(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("config get: profile %q not found", configProfileFlag)
 		}
 
+		// Handle scaffold.* keys directly (not part of lint Config)
+		key := args[0]
+		switch key {
+		case "scaffold.state":
+			fmt.Println(profile.Scaffold.State)
+			return nil
+		case "scaffold.providers":
+			fmt.Println(strings.Join(profile.Scaffold.Providers, ","))
+			return nil
+		}
+
 		tempCfg := &config.Config{Lint: profile.Lint}
-		val, err := tempCfg.Get(args[0])
+		val, err := tempCfg.Get(key)
 		if err != nil {
 			return err
 		}
@@ -150,6 +161,10 @@ func runConfigSet(cmd *cobra.Command, args []string) error {
 				return err
 			}
 			profile.Lint = tempCfg.Lint
+		} else if key == "scaffold.state" {
+			profile.Scaffold.State = value
+		} else if key == "scaffold.providers" {
+			profile.Scaffold.Providers = strings.Split(value, ",")
 		} else {
 			return fmt.Errorf("config set: unsupported key %q for profile", key)
 		}

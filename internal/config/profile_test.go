@@ -457,3 +457,194 @@ func TestContainsGlob(t *testing.T) {
 		})
 	}
 }
+
+// TestValidateScaffoldProviders_NoDuplicates - distinct providers across profiles: no error.
+func TestValidateScaffoldProviders_NoDuplicates(t *testing.T) {
+	cfg := &GlobalConfig{
+		Profiles: map[string]Profile{
+			"aws": {
+				Scaffold: ScaffoldConfig{
+					Providers: []string{"aws", "random"},
+				},
+			},
+			"azure": {
+				Scaffold: ScaffoldConfig{
+					Providers: []string{"azurerm"},
+				},
+			},
+		},
+	}
+
+	err := ValidateScaffoldProviders(cfg)
+	assert.NoError(t, err)
+}
+
+// TestValidateScaffoldProviders_Duplicate - two profiles with same provider: error contains
+// provider name and both profile names.
+func TestValidateScaffoldProviders_Duplicate(t *testing.T) {
+	cfg := &GlobalConfig{
+		Profiles: map[string]Profile{
+			"profile-a": {
+				Scaffold: ScaffoldConfig{
+					Providers: []string{"aws", "random"},
+				},
+			},
+			"profile-b": {
+				Scaffold: ScaffoldConfig{
+					Providers: []string{"aws", "azurerm"},
+				},
+			},
+		},
+	}
+
+	err := ValidateScaffoldProviders(cfg)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "aws")
+	assert.Contains(t, err.Error(), "profile-a")
+	assert.Contains(t, err.Error(), "profile-b")
+}
+
+// TestValidateScaffoldProviders_EmptyProviders - empty provider lists: no error.
+func TestValidateScaffoldProviders_EmptyProviders(t *testing.T) {
+	cfg := &GlobalConfig{
+		Profiles: map[string]Profile{
+			"empty-a": {
+				Scaffold: ScaffoldConfig{
+					Providers: []string{},
+				},
+			},
+			"empty-b": {
+				Scaffold: ScaffoldConfig{
+					Providers: []string{},
+				},
+			},
+		},
+	}
+
+	err := ValidateScaffoldProviders(cfg)
+	assert.NoError(t, err)
+}
+
+// TestScaffoldProfileForProvider_Match - provider in named profile returns that profile name.
+func TestScaffoldProfileForProvider_Match(t *testing.T) {
+	cfg := &GlobalConfig{
+		Profiles: map[string]Profile{
+			"aws-config": {
+				Scaffold: ScaffoldConfig{
+					Providers: []string{"aws", "random"},
+				},
+			},
+			"azure-config": {
+				Scaffold: ScaffoldConfig{
+					Providers: []string{"azurerm"},
+				},
+			},
+		},
+	}
+
+	result := ScaffoldProfileForProvider(cfg, "aws")
+	assert.Equal(t, "aws-config", result)
+
+	result = ScaffoldProfileForProvider(cfg, "azurerm")
+	assert.Equal(t, "azure-config", result)
+}
+
+// TestScaffoldProfileForProvider_NoMatch - unknown provider returns "".
+func TestScaffoldProfileForProvider_NoMatch(t *testing.T) {
+	cfg := &GlobalConfig{
+		Profiles: map[string]Profile{
+			"aws-config": {
+				Scaffold: ScaffoldConfig{
+					Providers: []string{"aws"},
+				},
+			},
+		},
+	}
+
+	result := ScaffoldProfileForProvider(cfg, "gcp")
+	assert.Equal(t, "", result)
+}
+
+// TestScaffoldProfileForProvider_NilConfig - nil GlobalConfig returns "".
+func TestScaffoldProfileForProvider_NilConfig(t *testing.T) {
+	result := ScaffoldProfileForProvider(nil, "aws")
+	assert.Equal(t, "", result)
+}
+
+// TestLoadGlobal_SaveGlobal_ScaffoldRoundtrip - save GlobalConfig with scaffold config,
+// load it back, verify scaffold fields preserved.
+func TestLoadGlobal_SaveGlobal_ScaffoldRoundtrip(t *testing.T) {
+	tmpDir := t.TempDir()
+	filePath := filepath.Join(tmpDir, "config.yml")
+
+	original := &GlobalConfig{
+		Profiles: map[string]Profile{
+			"default": {
+				Lint: LintConfig{
+					Rules: map[string]RuleConfig{
+						"missing-required": {Enabled: true},
+					},
+				},
+			},
+			"aws-prod": {
+				Bind: []string{"/projects/acme-corp/aws"},
+				Scaffold: ScaffoldConfig{
+					State:     "s3://tk-test-000-state/prod",
+					Providers: []string{"aws", "random"},
+				},
+				Lint: LintConfig{
+					Rules: map[string]RuleConfig{
+						"missing-description": {Enabled: true},
+					},
+				},
+			},
+		},
+	}
+
+	err := SaveGlobal(filePath, original)
+	require.NoError(t, err)
+
+	loaded, err := LoadGlobal(filePath)
+	require.NoError(t, err)
+
+	// Verify default profile
+	assert.NotNil(t, loaded.Profiles["default"])
+	assert.Equal(t, true, loaded.Profiles["default"].Lint.Rules["missing-required"].Enabled)
+
+	// Verify aws-prod profile scaffold fields
+	awsProd := loaded.Profiles["aws-prod"]
+	assert.NotNil(t, awsProd)
+	assert.Equal(t, "/projects/acme-corp/aws", awsProd.Bind[0])
+	assert.Equal(t, "s3://tk-test-000-state/prod", awsProd.Scaffold.State)
+	assert.Equal(t, []string{"aws", "random"}, awsProd.Scaffold.Providers)
+}
+
+// TestLoadGlobal_DuplicateScaffoldProviders - file with duplicate providers fails LoadGlobal.
+func TestLoadGlobal_DuplicateScaffoldProviders(t *testing.T) {
+	tmpDir := t.TempDir()
+	filePath := filepath.Join(tmpDir, "config.yml")
+
+	content := `profiles:
+  default:
+    lint:
+      rules:
+        missing-required: true
+  profile-a:
+    scaffold:
+      state: s3://bucket/a
+      providers:
+        - aws
+  profile-b:
+    scaffold:
+      state: s3://bucket/b
+      providers:
+        - aws
+`
+	require.NoError(t, os.WriteFile(filePath, []byte(content), 0o644))
+
+	_, err := LoadGlobal(filePath)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "aws")
+	assert.Contains(t, err.Error(), "profile-a")
+	assert.Contains(t, err.Error(), "profile-b")
+}

@@ -3,6 +3,7 @@ package validate
 import (
 	"path/filepath"
 	"runtime"
+	"sort"
 	"testing"
 
 	"dangernoodle.io/terranoodle/internal/config"
@@ -116,15 +117,27 @@ func TestFile_GitCachedSubdir(t *testing.T) {
 func TestFile_DepMergeExempt(t *testing.T) {
 	errs, err := File(testdataPath("dep-merge-exempt"))
 	require.NoError(t, err)
-	assert.Empty(t, errs, "dep output keys not in child module vars should be exempt from extra-input check")
+	require.Len(t, errs, 1)
+	assert.Equal(t, ExtraInput, errs[0].Kind)
+	assert.Equal(t, "region", errs[0].Variable)
+	assert.Equal(t, SeverityWarning, errs[0].Severity)
+	assert.Contains(t, errs[0].Detail, "from dependency outputs")
 }
 
 func TestFile_DepMergeExtra(t *testing.T) {
 	errs, err := File(testdataPath("dep-merge-extra"))
 	require.NoError(t, err)
-	require.Len(t, errs, 1)
+	require.Len(t, errs, 2)
+
+	// Sort by variable name for deterministic order
+	sort.Slice(errs, func(i, j int) bool { return errs[i].Variable < errs[j].Variable })
+
 	assert.Equal(t, ExtraInput, errs[0].Kind)
 	assert.Equal(t, "bogus_key", errs[0].Variable, "literal extra key should still be reported")
+
+	assert.Equal(t, ExtraInput, errs[1].Kind)
+	assert.Equal(t, "region", errs[1].Variable)
+	assert.Equal(t, SeverityWarning, errs[1].Severity)
 }
 
 func TestFile_TypeMismatchSimple(t *testing.T) {

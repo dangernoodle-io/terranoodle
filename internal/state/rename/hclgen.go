@@ -2,11 +2,25 @@ package rename
 
 import (
 	"bytes"
+	"embed"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
+	"text/template"
 )
+
+//go:embed templates/moved_block.tmpl
+var movedTemplateFS embed.FS
+
+var movedTmpl = template.Must(
+	template.New("moved_block.tmpl").
+		ParseFS(movedTemplateFS, "templates/moved_block.tmpl"),
+)
+
+type movedData struct {
+	Pairs []RenamePair
+}
 
 // GenerateMovedFile returns HCL bytes containing one moved {} block per pair.
 // Pairs are sorted by From address for deterministic output.
@@ -22,11 +36,8 @@ func GenerateMovedFile(pairs []RenamePair) []byte {
 	})
 
 	var buf bytes.Buffer
-	for i, p := range sorted {
-		if i > 0 {
-			buf.WriteByte('\n')
-		}
-		fmt.Fprintf(&buf, "moved {\n  from = %s\n  to   = %s\n}\n", p.From, p.To)
+	if err := movedTmpl.Execute(&buf, movedData{Pairs: sorted}); err != nil {
+		panic("rename: render moved template: " + err.Error())
 	}
 	return buf.Bytes()
 }

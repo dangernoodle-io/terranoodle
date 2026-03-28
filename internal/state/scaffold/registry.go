@@ -65,6 +65,18 @@ var registryBaseURL = "https://raw.githubusercontent.com"
 // httpClient is used for registry fetches with a 10s timeout.
 var httpClient = &http.Client{Timeout: 10 * time.Second}
 
+// iamBaseSuffix returns the shared _iam doc suffix for IAM member/binding/policy
+// resource suffixes, or empty string if suffix is not an IAM variant.
+// e.g., "artifact_registry_repository_iam_member" → "artifact_registry_repository_iam".
+func iamBaseSuffix(suffix string) string {
+	for _, variant := range []string{"_iam_member", "_iam_binding", "_iam_policy"} {
+		if strings.HasSuffix(suffix, variant) {
+			return suffix[:len(suffix)-len(variant)] + "_iam"
+		}
+	}
+	return ""
+}
+
 // FetchImportFormat fetches the import format for resourceType from the
 // Terraform provider docs on GitHub. Results are cached in cache.
 // Returns empty string on any error or 404 (graceful degradation).
@@ -83,6 +95,13 @@ func FetchImportFormat(ctx context.Context, resourceType string, cache map[strin
 		// Fallback: some providers keep the full resource type name in doc filenames
 		registryBaseURL + "/" + namespace + "/terraform-provider-" + provider + "/main/website/docs/r/" + resourceType + ".html.markdown",
 		registryBaseURL + "/" + namespace + "/terraform-provider-" + provider + "/main/docs/resources/" + resourceType + ".md",
+	}
+
+	if iamSuffix := iamBaseSuffix(suffix); iamSuffix != "" {
+		urls = append(urls,
+			registryBaseURL+"/"+namespace+"/terraform-provider-"+provider+"/main/website/docs/r/"+iamSuffix+".html.markdown",
+			registryBaseURL+"/"+namespace+"/terraform-provider-"+provider+"/main/docs/resources/"+iamSuffix+".md",
+		)
 	}
 
 	for _, url := range urls {
@@ -115,7 +134,7 @@ var importSectionRe = regexp.MustCompile(`(?im)^#{1,2}\s+import\s*$`)
 
 // terraformImportLineRe matches a line containing "terraform import <address> <id>".
 // Capture group 1 = the import ID portion.
-var terraformImportLineRe = regexp.MustCompile(`(?i)terraform\s+import\s+\S+\s+(\S+)`)
+var terraformImportLineRe = regexp.MustCompile(`(?i)terraform\s+import\s+\S+\s+(?:"([^"]+)"|(\S+))`)
 
 // ParseImportSection finds the ## Import or # Import section in markdown and
 // extracts the import ID from a "terraform import" command line within it.
@@ -138,7 +157,10 @@ func ParseImportSection(markdown string) string {
 	if m == nil {
 		return ""
 	}
-	return m[1]
+	if m[1] != "" {
+		return m[1]
+	}
+	return m[2]
 }
 
 // placeholderRe matches both {{name}} and {name} style placeholders.

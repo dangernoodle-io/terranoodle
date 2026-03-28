@@ -58,11 +58,13 @@ const planWithDestroyCreatePairs = `{
     {
       "address": "aws_s3_bucket.old_name",
       "type": "aws_s3_bucket",
+      "name": "old_name",
       "change": {"actions": ["delete"]}
     },
     {
       "address": "aws_s3_bucket.new_name",
       "type": "aws_s3_bucket",
+      "name": "new_name",
       "change": {"actions": ["create"]}
     },
     {
@@ -79,16 +81,19 @@ const planWithMultipleCreates = `{
     {
       "address": "aws_s3_bucket.old_bucket",
       "type": "aws_s3_bucket",
+      "name": "old_bucket",
       "change": {"actions": ["delete"]}
     },
     {
       "address": "aws_s3_bucket.new_bucket_a",
       "type": "aws_s3_bucket",
+      "name": "new_bucket_a",
       "change": {"actions": ["create"]}
     },
     {
       "address": "aws_s3_bucket.new_bucket_b",
       "type": "aws_s3_bucket",
+      "name": "new_bucket_b",
       "change": {"actions": ["create"]}
     }
   ]
@@ -106,11 +111,13 @@ const planWithMixedRenamesAndCandidates = `{
     {
       "address": "aws_iam_role.old_role",
       "type": "aws_iam_role",
+      "name": "old_role",
       "change": {"actions": ["delete"]}
     },
     {
       "address": "aws_iam_role.new_role",
       "type": "aws_iam_role",
+      "name": "new_role",
       "change": {"actions": ["create"]}
     }
   ]
@@ -122,11 +129,13 @@ const planWithDifferentTypeDestroyCreate = `{
     {
       "address": "aws_s3_bucket.old",
       "type": "aws_s3_bucket",
+      "name": "old",
       "change": {"actions": ["delete"]}
     },
     {
       "address": "aws_iam_role.new",
       "type": "aws_iam_role",
+      "name": "new",
       "change": {"actions": ["create"]}
     }
   ]
@@ -248,6 +257,73 @@ func TestMatchDestroyCreate_DifferentTypes(t *testing.T) {
 func TestMatchDestroyCreate_EmptyPlan(t *testing.T) {
 	candidates := MatchDestroyCreate(&tfjson.Plan{})
 	assert.Empty(t, candidates)
+}
+
+// TestMatchDestroyCreate_TypeOnlyFallback verifies the second-tier matching:
+// a destroy and create of the same type but different names should still produce
+// a candidate via the type-only fallback.
+func TestMatchDestroyCreate_TypeOnlyFallback(t *testing.T) {
+	plan := `{
+  "format_version": "1.0",
+  "resource_changes": [
+    {
+      "address": "aws_s3_bucket.old_data",
+      "type": "aws_s3_bucket",
+      "name": "old_data",
+      "change": {"actions": ["delete"]}
+    },
+    {
+      "address": "aws_s3_bucket.new_data",
+      "type": "aws_s3_bucket",
+      "name": "new_data",
+      "change": {"actions": ["create"]}
+    }
+  ]
+}`
+	p := parsePlan(t, plan)
+	candidates := MatchDestroyCreate(p)
+
+	// No exact type+name match, but type-only fallback should find it
+	require.Len(t, candidates, 1)
+	assert.Equal(t, "aws_s3_bucket.old_data", candidates[0].Destroy.Address)
+	require.Len(t, candidates[0].Creates, 1)
+	assert.Equal(t, "aws_s3_bucket.new_data", candidates[0].Creates[0].Address)
+}
+
+// TestMatchDestroyCreate_TypeOnlySkipsMatched verifies that the second-tier
+// matching does not re-offer destroys or creates already matched in tier one.
+func TestMatchDestroyCreate_TypeOnlySkipsMatched(t *testing.T) {
+	plan := `{
+  "format_version": "1.0",
+  "resource_changes": [
+    {
+      "address": "aws_s3_bucket.data[\"old\"]",
+      "type": "aws_s3_bucket",
+      "name": "data",
+      "change": {"actions": ["delete"]}
+    },
+    {
+      "address": "aws_s3_bucket.data[\"new\"]",
+      "type": "aws_s3_bucket",
+      "name": "data",
+      "change": {"actions": ["create"]}
+    },
+    {
+      "address": "aws_s3_bucket.orphan",
+      "type": "aws_s3_bucket",
+      "name": "orphan",
+      "change": {"actions": ["delete"]}
+    }
+  ]
+}`
+	p := parsePlan(t, plan)
+	candidates := MatchDestroyCreate(p)
+
+	// Tier 1 matches data[old] -> data[new] (same name).
+	// Tier 2 should match orphan -> but NO available creates (data[new] already matched).
+	// So only 1 candidate total.
+	require.Len(t, candidates, 1)
+	assert.Equal(t, "aws_s3_bucket.data[\"old\"]", candidates[0].Destroy.Address)
 }
 
 func TestMatchDestroyCreate_SameTypeDifferentName(t *testing.T) {

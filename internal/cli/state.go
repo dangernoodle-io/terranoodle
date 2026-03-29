@@ -492,7 +492,7 @@ func runStateImport(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return err
 		}
-		output.Info("Written: %s", path)
+		output.Success("Written: %s", path)
 
 		stopApply := ui.Spinner("Applying imports...")
 		err = applyFn(ctx, env.workDir, env.useTerragrunt)
@@ -512,7 +512,7 @@ func runStateImport(cmd *cobra.Command, args []string) error {
 	// --mv mode
 	if !importApplyFlag {
 		for _, e := range allEntries {
-			fmt.Printf("%s import %s %s\n", binaryName(env.useTerragrunt), output.Bold("%s", e.Address), output.Bold("%s", e.ID))
+			output.DryRun("%s import %s %s", binaryName(env.useTerragrunt), output.Cyan("%s", e.Address), output.Cyan("%s", e.ID))
 		}
 		return nil
 	}
@@ -529,6 +529,7 @@ func runStateImport(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return err
 		}
+		output.Item("%s", e.Address)
 	}
 	output.Success("Import complete")
 	return nil
@@ -688,8 +689,7 @@ func runStateRename(cmd *cobra.Command, args []string) error {
 	// --mv mode
 	if !renameApplyFlag {
 		for _, pair := range pairs {
-			msg := fmt.Sprintf("%s state mv %s %s", binaryName(env.useTerragrunt), output.Bold("%s", pair.From), output.Bold("%s", pair.To))
-			fmt.Println(msg)
+			output.DryRun("%s state mv %s %s", binaryName(env.useTerragrunt), output.Cyan("%s", pair.From), output.Cyan("%s", pair.To))
 		}
 		return nil
 	}
@@ -706,6 +706,7 @@ func runStateRename(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return err
 		}
+		output.Item("%s -> %s", pair.From, pair.To)
 	}
 	output.Success("State moves complete")
 	return nil
@@ -742,7 +743,7 @@ func runStateRemove(cmd *cobra.Command, args []string) error {
 
 	if !removeApplyFlag {
 		for _, t := range targets {
-			fmt.Printf("%s state rm %s\n", binaryName(env.useTerragrunt), output.Bold("%s", t.Address))
+			output.DryRun("%s state rm %s", binaryName(env.useTerragrunt), output.Cyan("%s", t.Address))
 		}
 		return nil
 	}
@@ -759,6 +760,7 @@ func runStateRemove(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return err
 		}
+		output.Item("%s", t.Address)
 	}
 	output.Success("State removals complete")
 	return nil

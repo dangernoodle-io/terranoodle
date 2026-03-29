@@ -33,7 +33,7 @@ func ConfirmCandidates(r io.Reader, w io.Writer, candidates []Candidate, autoCon
 
 		if len(available) == 1 {
 			if autoConfirm {
-				fmt.Fprintf(w, "%s %s -> %s\n", output.Bold("Auto-confirmed:"), c.Destroy.Address, available[0])
+				fmt.Fprintf(w, "%s %s -> %s\n", output.Bold("Auto-confirmed:"), output.Cyan("%s", c.Destroy.Address), output.Cyan("%s", available[0]))
 				pairs = append(pairs, RenamePair{From: c.Destroy.Address, To: available[0]})
 				consumed[available[0]] = true
 			} else {

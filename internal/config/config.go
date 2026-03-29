@@ -1,9 +1,12 @@
 package config
 
 import (
+	"embed"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"text/template"
 
 	"gopkg.in/yaml.v3"
 )
@@ -278,30 +281,30 @@ func Merge(a, b *Config) *Config {
 
 // Default returns a Config with all built-in rules enabled.
 func Default() *Config {
+	rules := make(map[string]RuleConfig, len(Rules))
+	for _, r := range Rules {
+		rules[r.Name] = RuleConfig{Enabled: r.Default}
+	}
 	return &Config{
 		Lint: LintConfig{
-			Rules: map[string]RuleConfig{
-				"missing-required":          {Enabled: true},
-				"extra-inputs":              {Enabled: true},
-				"type-mismatch":             {Enabled: true},
-				"source-ref-semver":         {Enabled: true},
-				"source-protocol":           {Enabled: false},
-				"missing-description":       {Enabled: false},
-				"non-snake-case":            {Enabled: false},
-				"unused-variables":          {Enabled: false},
-				"optional-without-default":  {Enabled: false},
-				"missing-include-expose":    {Enabled: false},
-				"allowed-filenames":         {Enabled: false},
-				"has-versions-tf":           {Enabled: false},
-				"no-tg-provider-blocks":     {Enabled: false},
-				"set-string-type":           {Enabled: false},
-				"provider-constraint-style": {Enabled: false},
-				"empty-outputs-tf":          {Enabled: false},
-				"versions-tf-symlink":       {Enabled: false},
-				"missing-validation":        {Enabled: false},
-				"sensitive-output":          {Enabled: false},
-				"dependency-merge-order":    {Enabled: false},
-			},
+			Rules: rules,
 		},
 	}
+}
+
+//go:embed templates/config_long.yml.tmpl
+var longTemplateFS embed.FS
+
+var longTmpl = template.Must(
+	template.New("config_long.yml.tmpl").
+		ParseFS(longTemplateFS, "templates/config_long.yml.tmpl"),
+)
+
+type longTemplateData struct {
+	Rules []RuleMeta
+}
+
+// RenderLong renders the annotated config template with all rule metadata.
+func RenderLong(w io.Writer) error {
+	return longTmpl.Execute(w, longTemplateData{Rules: Rules})
 }

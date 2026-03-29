@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
@@ -1032,4 +1033,84 @@ autofix: false
 	assert.Contains(t, string(data), "enabled: true")
 	assert.Contains(t, string(data), "severity: error")
 	assert.Contains(t, string(data), "autofix: false")
+}
+
+// TestRenderLong verifies RenderLong produces valid annotated config YAML.
+func TestRenderLong(t *testing.T) {
+	var buf bytes.Buffer
+	err := RenderLong(&buf)
+	require.NoError(t, err)
+
+	output := buf.String()
+	assert.NotEmpty(t, output)
+
+	// Verify all rule names are present
+	for _, r := range Rules {
+		assert.Contains(t, output, r.Name, "rule name %s should be in output", r.Name)
+		assert.Contains(t, output, r.Description, "rule description for %s should be in output", r.Name)
+	}
+
+	// Parse the output as YAML to verify it's valid
+	var cfg Config
+	err = yaml.Unmarshal([]byte(output), &cfg)
+	require.NoError(t, err)
+
+	// Verify all rules are present in the parsed config
+	for _, r := range Rules {
+		_, ok := cfg.Lint.Rules[r.Name]
+		assert.True(t, ok, "rule %s should be in parsed config", r.Name)
+	}
+
+	// Verify default-enabled rules have Enabled: true
+	for _, r := range Rules {
+		if r.Default {
+			rule, ok := cfg.Lint.Rules[r.Name]
+			assert.True(t, ok, "rule %s should exist", r.Name)
+			assert.Equal(t, true, rule.Enabled, "rule %s should be enabled by default", r.Name)
+		}
+	}
+}
+
+// TestRenderLongAutofixComments verifies autofix rules have "supports: autofix" comment.
+func TestRenderLongAutofixComments(t *testing.T) {
+	var buf bytes.Buffer
+	err := RenderLong(&buf)
+	require.NoError(t, err)
+
+	output := buf.String()
+
+	// Find autofix rules
+	var autofixRules []string
+	for _, r := range Rules {
+		if r.Autofix {
+			autofixRules = append(autofixRules, r.Name)
+		}
+	}
+
+	// Verify each autofix rule has the "supports: autofix" comment
+	for _, ruleName := range autofixRules {
+		assert.Contains(t, output, "supports: autofix", "autofix rule %s should have 'supports: autofix' comment", ruleName)
+	}
+}
+
+// TestRenderLongOptionsComments verifies rules with options have "options:" comment.
+func TestRenderLongOptionsComments(t *testing.T) {
+	var buf bytes.Buffer
+	err := RenderLong(&buf)
+	require.NoError(t, err)
+
+	output := buf.String()
+
+	// Find rules with options
+	var rulesWithOptions []string
+	for _, r := range Rules {
+		if len(r.Options) > 0 {
+			rulesWithOptions = append(rulesWithOptions, r.Name)
+		}
+	}
+
+	// For rules with options, we expect at least one "# options:" comment in the output
+	if len(rulesWithOptions) > 0 {
+		assert.Contains(t, output, "# options:", "output should contain options comments")
+	}
 }

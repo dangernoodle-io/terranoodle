@@ -15,6 +15,7 @@ import (
 
 var configGlobalFlag bool
 var configProfileFlag string
+var configLongFlag bool
 
 var configCmd = &cobra.Command{
 	Use:   "config",
@@ -52,6 +53,7 @@ func init() {
 	configSetCmd.Flags().StringVar(&configProfileFlag, "profile", "", "Target profile (implies --global)")
 	configGetCmd.Flags().StringVar(&configProfileFlag, "profile", "", "Read from a specific profile")
 	configInitCmd.Flags().BoolVar(&configGlobalFlag, "global", false, "Create global config")
+	configInitCmd.Flags().BoolVar(&configLongFlag, "long", false, "Generate annotated config with descriptions and options")
 
 	configCmd.AddCommand(configGetCmd)
 	configCmd.AddCommand(configSetCmd)
@@ -249,7 +251,20 @@ func runConfigInit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("config init: %s already exists", label)
 	}
 
-	if configGlobalFlag {
+	if configLongFlag {
+		dir := filepath.Dir(path)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return fmt.Errorf("config init: %w", err)
+		}
+		f, err := os.Create(path)
+		if err != nil {
+			return fmt.Errorf("config init: %w", err)
+		}
+		defer f.Close()
+		if err := config.RenderLong(f); err != nil {
+			return fmt.Errorf("config init: %w", err)
+		}
+	} else if configGlobalFlag {
 		if err := config.SaveGlobal(path, config.DefaultGlobal()); err != nil {
 			return err
 		}

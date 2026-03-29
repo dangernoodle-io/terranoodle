@@ -1,0 +1,25 @@
+lint:
+  rules:
+{{- range $i, $r := .Rules}}
+{{- if $i}}
+{{end}}
+    # {{$r.Description}}
+{{- if $r.Options}}
+    # options:
+{{- range $r.Options}}
+    #   {{.Key}}: {{.Example}}  # {{.Desc}}
+{{- end}}
+{{- end}}
+{{- if $r.Autofix}}
+    # supports: autofix
+{{- end}}
+    {{$r.Name}}: {{$r.Default}}
+{{- end}}
+
+  # exclude-dirs:
+  #   - .terragrunt-cache
+
+  # overrides:
+  #   - paths: ["modules/legacy/**"]
+  #     rules:
+  #       extra-inputs: false
